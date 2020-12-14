@@ -109,14 +109,16 @@ def array_to_gif(pth, fname, arr, max_val=None, downsample=1, time_ax=0, timeste
     save_frames(os.path.join(pth, fname), "gif", frames, timestep=timestep)
 
 
-def array_to_tiff(pth, fname, arr, time_ax=0, max_val=None):
+def array_to_tiff(pth, fname, arr, time_ax=0, max_val=None, hq=True):
     """Use tifffile library to save 16-bit tiff stack. (PIL can only do 8-bit)."""
     if time_ax != 0:
         arr = np.moveaxis(arr, time_ax, 0)
 
     os.makedirs(pth, exist_ok=True)
 
-    imsave(os.path.join(pth, fname) + ".tiff", normalize_uint16(arr, max_val))
+    norm = normalize_uint16 if hq else normalize_uint8
+
+    imsave(os.path.join(pth, fname) + ".tif", norm(arr, max_val))
 
 
 def array_to_h5(pth, fname, arr, time_ax=0):
@@ -135,6 +137,15 @@ def re_export_tiff(pth, fname):
     out_pth = os.path.join(pth, "re_export")
     os.makedirs(out_pth, exist_ok=True)
     imsave(os.path.join(out_pth, fname), io.imread(os.path.join(pth, fname)))
+
+
+def re_export_folder(pth):
+    out_pth = os.path.join(pth, "re_export")
+    os.makedirs(out_pth, exist_ok=True)
+    for fname in os.listdir(pth):
+        if not (fname.endswith(".tiff") or fname.endswith(".tif")):
+            continue
+        imsave(os.path.join(out_pth, fname), io.imread(os.path.join(pth, fname)))
 
 
 def pool_tiff(pth, fname, kernel_size=2, stride=None, padding=0):
