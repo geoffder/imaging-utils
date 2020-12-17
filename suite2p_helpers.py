@@ -24,8 +24,7 @@ def bipolar_ops(diam=8, allow_overlap=True):
 
 
 def get_suite2p_data(pth, exclude_non_cells=True):
-    """
-    Load extracted recordings (raw fluoresence (F), neuropil (Fneu)) and cell
+    """Load extracted recordings (raw fluoresence (F), neuropil (Fneu)) and cell
     information (stat, which includes ROI pixels (xpix, ypix) and their
     weighting (lam)) from the given suite2p output folder.
 
@@ -47,8 +46,7 @@ def get_suite2p_data(pth, exclude_non_cells=True):
 
 
 def get_raw_scans(datapath, prefix='Scan', start_scan=False, num_scans=False):
-    """
-    Load in original 2PLSM scans, stack them and return as (T, Y, X) array.
+    """Load in original 2PLSM scans, stack them and return as (T, Y, X) array.
     If start_scan and num_scans are not specified, all scans in the folder are
     loaded.
     """
@@ -68,8 +66,7 @@ def get_raw_scans(datapath, prefix='Scan', start_scan=False, num_scans=False):
 
 
 def get_beams(movie, stats):
-    """
-    Pull out z-projection for each cell using it's generated ROI, but without
+    """Pull out z-projection for each cell using it's generated ROI, but without
     pixel weighting assigned by suite2p. Weighted beam extraction is what is
     represented in suite2p's F.npy output.
 
@@ -83,9 +80,8 @@ def get_beams(movie, stats):
 
 
 def create_masks(stats, dims):
-    """
-    Use ypix and xpix index arrays and the corresponding weights found in lam to
-    generate weighted spatial masks for each cell.
+    """Use ypix and xpix index arrays and the corresponding weights found in lam
+    to generate weighted spatial masks for each cell.
     """
     masks = np.zeros((stats.size, *dims))
     for idx in range(stats.size):
@@ -94,7 +90,12 @@ def create_masks(stats, dims):
 
 
 def roi_movie(beams, stats, dims):
-    """NOTE: lam contains the weighting of each pixel."""
+    """Create stack from a beams array shape:(N, T) representing signal over time
+    for N rois. `stats` is an array of length N containing dicts with the x and y
+    pixel indices of the rois (and the weighting of each pixel in field lam)
+    corresponding to the signals in beams. Pixel indices correspond to the dimensions
+    of the stack originally fed into suite2p.
+    """
     arr = np.zeros(dims)
     for i in range(beams.shape[0]):
         arr[:, stats[i]["ypix"], stats[i]["xpix"]] += (
@@ -125,8 +126,7 @@ def unpack_hdf(group):
 
 
 def store_csvs(pth, fldr, Fcell, Fneu, roi_masks):
-    """
-    Store recordings and masks as CSVs to make loading in to IgorPro easy.
+    """Store recordings and masks as CSVs to make loading in to IgorPro easy.
     Save floats with limited precision, and masks are integers for readability
     and storage space considerations.
     """
@@ -183,23 +183,20 @@ def analyze_folder(base_path, diam=8):
 
         dims = stack.shape
         masks = create_masks(stats, dims[1:])
-        movie = roi_movie(recs, stats, dims)
         denoised = roi_movie(recs - neu * 0.7, stats, dims)
 
         data = {
             "Fcell": recs,
             "Fneu": neu,
             "pixels": pixels,
-            "masks": masks,
-            "denoised": denoised,
+            "masks": masks.transpose(1, 2, 0),
+            "denoised": denoised.transpose(1, 2, 0),
         }
 
         no_ext = re.sub("\.tif?[f]", "", name)
-        array_to_tiff(out_path, no_ext + "_roid", movie)
-        array_to_tiff(out_path, no_ext + "_denoised", denoised)
-        array_to_gif(out_path, no_ext + "_denoised", denoised, timestep=20)
+        array_to_gif(out_path, no_ext + "_denoised", denoised, timestep=150)
         pack_hdf(os.path.join(out_path, no_ext), data)
-        del(recs, neu, pixels, masks, movie, denoised)
+        del(recs, neu, pixels, masks, denoised)
 
     shutil.rmtree(os.path.join(base_path, "suite2p"))
 
