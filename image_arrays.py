@@ -89,8 +89,7 @@ def normalize_uint16(arr, max_val=None):
 
 
 def array_to_gif(pth, fname, arr, max_val=None, downsample=1, time_ax=0, timestep=40):
-    """
-    Takes desired path and filename (without extension) and a numpy matrix and saves
+    """Takes desired path and filename (without extension) and a numpy matrix and saves
     it as a GIF using the PIL.Image module. If time_ax indicates that the time dim
     is not first, then it will be moved to make the shape = (T, H, W).
     """
@@ -98,14 +97,12 @@ def array_to_gif(pth, fname, arr, max_val=None, downsample=1, time_ax=0, timeste
         arr = np.moveaxis(arr, time_ax, 0)
 
     arr = normalize_uint8(arr)
-
     frames = [
         Image.fromarray(arr[i * downsample], mode="P")
         for i in range(int(arr.shape[0] / downsample))
     ]
 
     os.makedirs(pth, exist_ok=True)
-
     save_frames(os.path.join(pth, fname), "gif", frames, timestep=timestep)
 
 
@@ -114,10 +111,9 @@ def array_to_tiff(pth, fname, arr, time_ax=0, max_val=None, hq=True):
     if time_ax != 0:
         arr = np.moveaxis(arr, time_ax, 0)
 
-    os.makedirs(pth, exist_ok=True)
-
     norm = normalize_uint16 if hq else normalize_uint8
 
+    os.makedirs(pth, exist_ok=True)
     imsave(os.path.join(pth, fname) + ".tif", norm(arr, max_val))
 
 
@@ -126,7 +122,6 @@ def array_to_h5(pth, fname, arr, time_ax=0):
         arr = np.moveaxis(arr, time_ax, 0)
 
     os.makedirs(pth, exist_ok=True)
-
     with h5.File(os.path.join(pth, fname) + ".h5", "w") as f:
         f.create_dataset("data", data=arr)
 
