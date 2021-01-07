@@ -138,6 +138,7 @@ def analyze_folder(base_path, diam=8, gif_timestep=200):
     db = {"data_path": [base_path]}
 
     for name, stack in zip(names, stacks):
+        shutil.rmtree(os.path.join(base_path, "suite2p"))
         db["tiff_list"] = [name]
         _out_ops = run_s2p(ops, db)
         recs, neu, stats = get_suite2p_data(s2p_pth, exclude_non_cells=False)
