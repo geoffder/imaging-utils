@@ -18,7 +18,7 @@ extended over time as needed.
   ensure the additional libraries required by `s2p_runner.py` are installed,
   like so: `conda install scikit-image pillow`
 
-### Usage
+### Usage ( s2p_runner.py )
 * Run the script `s2p_runner.py` from a directory containing tiffs which you
   would like to extract ROIs from, which might look something like this:
   * **Windows:** `C:\path\to\tiffs> python C:\path\to\script\s2p_runner.py`
@@ -34,6 +34,15 @@ extended over time as needed.
 * Currently available options are:
   * `diam`: number of pixels diameter of "cell" ROIs to look for
   * `gif_timestep`: milliseconds per frame for the generated gifs
+
+### s2p_packer.py
+* This script will re-pack an existing **suite2p** folder into and hdf5, and
+  generate a denoised gif, placing them in an adjacent directory named `s2p`.
+* Currently, this is just geared to be ran inside of a folder containing a
+  single tiff that has already been analysed using the `suite2p` GUI.
+* Usage is otherwise similar to `s2p_runner.py`.
+* Currently available options are:
+  * `gif_timestep`: milliseconds per frame for the generated gif
 
 ### Anatomy of an output h5
 * `Fcell`: raw fluorescence of each ROI (N x T matrix)
