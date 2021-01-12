@@ -43,6 +43,8 @@ extended over time as needed.
 * Usage is otherwise similar to `s2p_runner.py`.
 * Currently available options are:
   * `gif_timestep`: milliseconds per frame for the generated gif
+  * `only_cells`: (0 or 1) If 1, ROIs predicted as non-cells by suite2p will
+    not be included in the hdf5 data, otherwise all are included (default).
 
 ### Anatomy of an output h5
 * `Fcell`: raw fluorescence of each ROI (N x T matrix)

@@ -114,8 +114,10 @@ def unpack_hdf(group):
     }
 
 
-def pack_suite2p(s2p_pth, out_path, out_name, stack_dims, gif_timestep):
-    recs, neu, stats = get_suite2p_data(s2p_pth, exclude_non_cells=False)
+def pack_suite2p(
+    s2p_pth, out_path, out_name, stack_dims, gif_timestep, exclude_non_cells=False
+):
+    recs, neu, stats = get_suite2p_data(s2p_pth, exclude_non_cells)
 
     # x and y pix are swapped to coincide with IgorPro conventions
     pixels = {
@@ -172,4 +174,5 @@ if __name__ == "__main__":
         out_name,
         stack_dims,
         gif_timestep=int(settings.get("gif_timestep", 200)),
+        exclude_non_cells=int(settings.get("only_cells", 0)),
     )
