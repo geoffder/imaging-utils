@@ -115,7 +115,13 @@ def unpack_hdf(group):
 
 
 def pack_suite2p(
-    s2p_pth, out_path, out_name, stack_dims, gif_timestep, exclude_non_cells=False
+    s2p_pth,
+    out_path,
+    out_name,
+    space_dims,
+    gif_timestep,
+    trial_pts=None,
+    exclude_non_cells=False
 ):
     recs, neu, stats = get_suite2p_data(s2p_pth, exclude_non_cells)
 
@@ -129,17 +135,26 @@ def pack_suite2p(
         for i, n in enumerate(stats)
     }
 
-    masks = create_masks(stats, stack_dims[1:])
-    denoised = roi_movie(recs - neu * 0.7, stats, stack_dims)
+    n_pts = recs.shape[1]
+    masks = create_masks(stats, space_dims)
+    denoised = roi_movie(recs - neu * 0.7, stats, (n_pts, *space_dims))
 
     # masks and denoised axes transposed to fit with IgorPro conventions
     data = {
-        "Fcell": recs,
-        "Fneu": neu,
         "pixels": pixels,
         "masks": masks.transpose(2, 1, 0),  # N to last dim, swap X and Y
         "denoised": denoised.transpose(2, 1, 0),  # time to last dim, swap X and Y
     }
+
+    if trial_pts is None:
+        data["recs"] = recs
+        data["Fneu"] = neu
+    else:
+        t0 = 0
+        for name, pts in trial_pts.items():
+            t1 = t0 + pts
+            data[name] = {"recs": recs[:, t0:t1], "Fneu": neu[:, t0:t1]}
+            t0 = t1
 
     array_to_gif(out_path, out_name + "_denoised", denoised, timestep=gif_timestep)
     pack_hdf(os.path.join(out_path, out_name), data)
@@ -161,8 +176,12 @@ if __name__ == "__main__":
     names = [
         f for f in os.listdir(base_path) if (f.endswith(".tiff") or f.endswith(".tif"))
     ]
-    stack_dims = io.imread(os.path.join(base_path, names[0])).shape
+    stacks = [io.imread(os.path.join(base_path, f)) for f in names]
 
+    trial_pts = {re.sub("\.tif?[f]", "", f): s.shape[0]
+                 for f, s in zip(names, stacks)} if len(names) > 0 else None
+
+    space_dims = stacks[0].shape[1:]
     out_path = os.path.join(base_path, "s2p")
     os.makedirs(out_path, exist_ok=True)
     out_name = re.sub("\.tif?[f]", "", names[0])
@@ -172,7 +191,8 @@ if __name__ == "__main__":
         s2p_pth,
         out_path,
         out_name,
-        stack_dims,
+        space_dims,
+        trial_pts=trial_pts,
         gif_timestep=int(settings.get("gif_timestep", 200)),
         exclude_non_cells=int(settings.get("only_cells", 0)),
     )

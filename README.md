@@ -25,9 +25,15 @@ extended over time as needed.
   * **Linux:** `user@host /path/to/tiffs $ python /path/to/script/s2p_runner.py`
 * This will run suite2p on all of the tiffs contained in the current directory
   independantly with the same configuration, outputting a separate `.h5` file
-  for each of the tiffs. (The ability to group tiffs into sub-folders (one deep)
-  to be treated as multiple trials from the same scan field for the purposes of
-  improved ROI detection is forthcoming.)
+  for each of the tiffs.
+* Tiffs grouped into sub-folders (one level deep only) will be treated as
+  multiple scans/trials of the same scanfield. This should result in more
+  accurate/reliable ROI detection, as the algorithms in suite2p will have more
+  data to work with. A single `.h5` (and `.gif`) will be output to the `s2p`
+  directory for each sub-folder. Within the hdf5, the extracted recordings will
+  be separated into sub-groups with labels corresponding to the names of the
+  originating tiffs. Shared data (e.g. ROI definitions) across trials will be
+  found at the root level as usual.
 * Configuration options are added as additional (optional) arguments with the form
   `arg=val`, like so:
   * `s2p_runner.py diam=8 gif_timestep=100`
@@ -38,8 +44,8 @@ extended over time as needed.
 ### s2p_packer.py
 * This script will re-pack an existing **suite2p** folder into and hdf5, and
   generate a denoised gif, placing them in an adjacent directory named `s2p`.
-* Currently, this is just geared to be ran inside of a folder containing a
-  single tiff that has already been analysed using the `suite2p` GUI.
+* Designed to be ran inside of a folder containing a tiff (or tiffs, assuming
+  the whole folder was used) that has already been analysed using the `suite2p` GUI.
 * Usage is otherwise similar to `s2p_runner.py`.
 * Currently available options are:
   * `gif_timestep`: milliseconds per frame for the generated gif
