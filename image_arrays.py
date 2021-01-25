@@ -2,18 +2,17 @@ import os
 import h5py as h5
 import numpy as np
 import matplotlib.pyplot as plt
-
 from skimage import io
 from PIL import Image
 from tifffile import imsave
 import torch
 import torch.nn.functional as F
-
 """
 NOTE: Discoveries in working with suite2p again.
 - Can provide data as h5 archives with a stack stored under the key "data"
 - h5 array data cannot be float, must be uint16 (like a tiff)
 """
+
 
 class StackPlotter:
     """
@@ -28,10 +27,7 @@ class StackPlotter:
         self.slices = stack.shape[0]
         self.idx = 0
         self.delta = delta
-
-        self.im = ax.imshow(
-            self.stack[self.idx, :, :], cmap=cmap, vmin=vmin, vmax=vmax
-        )
+        self.im = ax.imshow(self.stack[self.idx, :, :], cmap=cmap, vmin=vmin, vmax=vmax)
         self.update()
 
     def onscroll(self, event):
@@ -144,9 +140,17 @@ def re_export_folder(pth):
 
 
 def pool_tiff(pth, fname, kernel_size=2, stride=None, padding=0):
-    arr    = io.imread(os.path.join(pth, fname))
-    t      = torch.from_numpy(arr.astype(float))
+    arr = io.imread(os.path.join(pth, fname))
+    t = torch.from_numpy(arr.astype(float))
     pooled = F.avg_pool2d(t, kernel_size, stride, padding).numpy()
-    u16    = normalize_uint16(remove_offset(pooled))
-    label  = "pooled_%i" % kernel_size
+    u16 = normalize_uint16(remove_offset(pooled))
+    label = "pooled_%i" % kernel_size
     array_to_tiff(os.path.join(pth, label), label, u16)
+
+
+def simple_upsample_2D(arr, y=1, x=1):
+    """Assumes `arr` is an ndarray with atleast two dimensions, and that the
+    spatial dimensions are the final two.
+    """
+    n_dims = len(arr.shape)
+    return arr.repeat(x, axis=(n_dims - 1)).repeat(y, axis=(n_dims - 2))
