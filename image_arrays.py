@@ -3,6 +3,7 @@ import h5py as h5
 import numpy as np
 import matplotlib.pyplot as plt
 from skimage import io
+from scipy import signal
 from PIL import Image
 from tifffile import imsave
 import torch
@@ -154,3 +155,43 @@ def simple_upsample_2D(arr, y=1, x=1):
     """
     n_dims = len(arr.shape)
     return arr.repeat(x, axis=(n_dims - 1)).repeat(y, axis=(n_dims - 2))
+
+
+def nearest_index(arr, v):
+    return np.abs(arr - v).argmin()
+
+
+def lead_window(stim_t, stim, stop, duration):
+    """Get slice of stimulus stack preceding the the timestamp `stop`, using the
+    time axis stim_t to look up the relevant indices."""
+    start_idx = nearest_index(stim_t, stop - duration)
+    stop_idx = nearest_index(stim_t, stop)
+    return stim[start_idx:stop_idx, :, :]
+
+
+def avg_trigger_window(stim_t, stim, rec_t, rec, thresh, duration):
+    """Rough implementation of threshold triggered averaging of a stimulus."""
+    idxs, _ = signal.find_peaks(rec, height=thresh)
+    times = rec_t[idxs]
+    avg = np.mean(
+        [
+            lead_window(stim_t, stim, t, duration)
+            for t in times if t - duration > np.min(stim_t) and t <= np.max(stim_t)
+        ],
+        axis=0
+    )
+    return len(idxs), avg
+
+
+def butter_bandpass(lowcut, highcut, sample_rate, order=5):
+    nyq = 0.5 * sample_rate
+    low = lowcut / nyq
+    high = highcut / nyq
+    b, a = signal.butter(order, [low, high], btype="bandpass")
+    return b, a
+
+
+def butter_bandpass_filter(data, lowcut, highcut, sample_rate, order=3):
+    b, a = butter_bandpass(lowcut, highcut, sample_rate, order=order)
+    y = signal.lfilter(b, a, data)
+    return y
