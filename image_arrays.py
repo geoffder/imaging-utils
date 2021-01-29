@@ -16,13 +16,12 @@ NOTE: Discoveries in working with suite2p again.
 
 
 class StackPlotter:
-    """
-    Returns Object for cycling through frames of a 3D image stack using the
+    """Returns Object for cycling through frames of a 3D image stack using the
     mouse scroll wheel. Takes the pyplot axis object and data as the first two
     arguments. Additionally, use delta to set the number of frames each step of
-    the wheel skips through.
-    """
-    def __init__(self, ax, stack, delta=10, vmin=None, vmax=None, cmap="gray"):
+    the wheel skips through."""
+    def __init__(self, fig, ax, stack, delta=10, vmin=None, vmax=None, cmap="gray"):
+        self.fig = fig
         self.ax = ax
         self.stack = stack
         self.slices = stack.shape[0]
@@ -30,6 +29,7 @@ class StackPlotter:
         self.delta = delta
         self.im = ax.imshow(self.stack[self.idx, :, :], cmap=cmap, vmin=vmin, vmax=vmax)
         self.update()
+        self.connect_scroll()
 
     def onscroll(self, event):
         if event.button == "up":
@@ -43,8 +43,8 @@ class StackPlotter:
         self.ax.set_ylabel("t = %s" % self.idx)
         self.im.axes.figure.canvas.draw()
 
-    def connect_scroll(self, fig):
-        fig.canvas.mpl_connect("scroll_event", self.onscroll)
+    def connect_scroll(self):
+        self.fig.canvas.mpl_connect("scroll_event", self.onscroll)
 
 
 def plot_stack(arr, delta=10, vmin=None, vmax=None, cmap="gray"):
