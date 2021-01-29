@@ -49,8 +49,7 @@ class StackPlotter:
 
 def plot_stack(arr, delta=10, vmin=None, vmax=None, cmap="gray"):
     fig, ax = plt.subplots(1)
-    stack = StackPlotter(ax, arr, delta, vmin, vmax, cmap)
-    stack.connect_scroll(fig)
+    stack = StackPlotter(fig, ax, arr, delta, vmin, vmax, cmap)
     fig.tight_layout()
     plt.show()
 
@@ -60,6 +59,7 @@ def array3d_to_frames(arr, mode="L"):
 
 
 def save_frames(fpath, ext, frames, timestep=40):
+    """Save list of Image objects as a file with the given ext, e.g. tiff or gif."""
     frames[0].save(
         fpath + "." + ext,
         save_all=True,
@@ -151,13 +151,13 @@ def pool_tiff(pth, fname, kernel_size=2, stride=None, padding=0):
 
 def simple_upsample_2D(arr, y=1, x=1):
     """Assumes `arr` is an ndarray with atleast two dimensions, and that the
-    spatial dimensions are the final two.
-    """
+    spatial dimensions are the final two."""
     n_dims = len(arr.shape)
     return arr.repeat(x, axis=(n_dims - 1)).repeat(y, axis=(n_dims - 2))
 
 
 def nearest_index(arr, v):
+    """Index of value closest to v in ndarray `arr`"""
     return np.abs(arr - v).argmin()
 
 
@@ -169,9 +169,9 @@ def lead_window(stim_t, stim, stop, duration):
     return stim[start_idx:stop_idx, :, :]
 
 
-def avg_trigger_window(stim_t, stim, rec_t, rec, thresh, duration):
+def avg_trigger_window(stim_t, stim, rec_t, rec, thresh, duration, distance=1):
     """Rough implementation of threshold triggered averaging of a stimulus."""
-    idxs, _ = signal.find_peaks(rec, height=thresh)
+    idxs, _ = signal.find_peaks(rec, height=thresh, distance=distance)
     times = rec_t[idxs]
     avg = np.mean(
         [
