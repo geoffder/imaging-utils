@@ -169,18 +169,16 @@ def lead_window(stim_t, stim, stop, duration):
     return stim[start_idx:stop_idx, :, :]
 
 
-def avg_trigger_window(stim_t, stim, rec_t, rec, thresh, duration, distance=1):
+def avg_trigger_window(stim_t, stim, rec_t, rec, duration, trigger_idxs):
     """Rough implementation of threshold triggered averaging of a stimulus."""
-    idxs, _ = signal.find_peaks(rec, height=thresh, distance=distance)
-    times = rec_t[idxs]
-    avg = np.mean(
+    times = rec_t[trigger_idxs]
+    return np.mean(
         [
             lead_window(stim_t, stim, t, duration)
-            for t in times if t - duration > np.min(stim_t) and t <= np.max(stim_t)
+            for t in times if (t - duration) > np.min(stim_t) and t <= np.max(stim_t)
         ],
         axis=0
     )
-    return len(idxs), avg
 
 
 def butter_bandpass(lowcut, highcut, sample_rate, order=5):
@@ -195,3 +193,12 @@ def butter_bandpass_filter(data, lowcut, highcut, sample_rate, order=3):
     b, a = butter_bandpass(lowcut, highcut, sample_rate, order=order)
     y = signal.lfilter(b, a, data)
     return y
+
+
+def reduce_chunks(arr, chunk_size, reducer=np.sum, axis=-1):
+    og_shape = arr.shape
+    if axis < 0:
+        axis += arr.ndim
+    new_shape = og_shape[:axis] + (-1, chunk_size) + og_shape[axis + 1:]
+    arr = arr.reshape(new_shape)
+    return reducer(arr, axis=(axis + 1))
