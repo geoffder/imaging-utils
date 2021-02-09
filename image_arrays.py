@@ -169,16 +169,23 @@ def lead_window(stim_t, stim, stop, duration):
     return stim[start_idx:stop_idx, :, :]
 
 
-def avg_trigger_window(stim_t, stim, rec_t, rec, duration, trigger_idxs):
+def soft_max(x):
+    ex = np.exp(x)
+    return ex / np.sum(ex, axis=0)
+
+
+def avg_trigger_window(
+    stim_t, stim, rec_t, rec, duration, trigger_idxs, prominences=None
+):
     """Rough implementation of threshold triggered averaging of a stimulus."""
     times = rec_t[trigger_idxs]
-    return np.mean(
-        [
-            lead_window(stim_t, stim, t, duration)
-            for t in times if (t - duration) > np.min(stim_t) and t <= np.max(stim_t)
-        ],
-        axis=0
-    )
+    legal = (times - duration > np.min(stim_t)) * (times <= np.max(stim_t))
+    leads = [lead_window(stim_t, stim, t, duration) for t in times[legal]]
+
+    if prominences is None:
+        return np.mean(leads, axis=0)
+    else:
+        return np.sum(leads * soft_max(prominences[legal].reshape(-1, 1, 1, 1)), axis=0)
 
 
 def butter_bandpass(lowcut, highcut, sample_rate, order=5):
