@@ -2,6 +2,7 @@ import os
 import h5py as h5
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib.patches import Rectangle
 from skimage import io
 from scipy import signal
 from PIL import Image
@@ -45,6 +46,109 @@ class StackPlotter:
 
     def connect_scroll(self):
         self.fig.canvas.mpl_connect("scroll_event", self.onscroll)
+
+
+class StackExplorer:
+    def __init__(
+        self,
+        stack,
+        zaxis=None,
+        delta=1,
+        roi_sz=1,
+        vmin=None,
+        vmax=None,
+        cmap="gray",
+        **plot_kwargs
+    ):
+        if "gridspec_kw" not in plot_kwargs:
+            plot_kwargs["gridspec_kw"] = {"height_ratios": [.7, .3]}
+        self.fig, self.ax = plt.subplots(2, **plot_kwargs)
+        self.stack, self.delta, self.roi_sz = stack, delta, roi_sz
+        self.z_sz, self.y_sz, self.x_sz = stack.shape
+        self.z_idx, self.roi_x, self.roi_y = 0, 0, 0
+        self.zaxis = np.arange(self.z_sz) if zaxis is None else zaxis
+        self.roi_locked = False
+
+        self.build_stack_ax(cmap, vmin, vmax)
+        self.build_roi_ax(vmin, vmax)
+        self.connect_events()
+
+    def build_stack_ax(self, cmap, vmin, vmax):
+        self.im = self.ax[0].imshow(
+            self.stack[self.z_idx, :, :], cmap=cmap, vmin=vmin, vmax=vmax
+        )
+        self.roi_rect = Rectangle(
+            (self.roi_x - .5, self.roi_y - .5),
+            self.roi_sz,
+            self.roi_sz,
+            fill=False,
+            color="red",
+            linewidth=2,
+        )
+        self.ax[0].add_patch(self.roi_rect)
+        self.update_im()
+
+    def build_roi_ax(self, vmin, vmax):
+        beam = self.update_beam()
+        self.roi_line = self.ax[1].plot(self.zaxis, beam)[0]
+        self.z_marker = self.ax[1].plot(self.zaxis[self.z_idx], beam[self.z_idx], "x")[0]
+        self.ax[1].set_ylim(vmin, vmax)
+        self.update_roi()
+
+    def update_beam(self):
+        if self.roi_sz > 1:
+            self.beam = np.mean(
+                self.stack[:, self.roi_y:self.roi_y + self.roi_sz,
+                           self.roi_x:self.roi_x + self.roi_sz],
+                axis=(1, 2)
+            )
+        else:
+            self.beam = self.stack[:, self.roi_y, self.roi_x]
+        return self.beam
+
+    def on_scroll(self, event):
+        if event.button == "up":
+            self.z_idx = (self.z_idx + self.delta) % self.z_sz
+        else:
+            self.z_idx = (self.z_idx - self.delta) % self.z_sz
+        self.z_marker.set_data(self.zaxis[self.z_idx], self.beam[self.z_idx])
+        self.update_im()
+
+    def on_move(self, event):
+        if (
+            not self.roi_locked and event.inaxes == self.ax[0] and
+            not (event.xdata is None or event.ydata is None)
+        ):
+            x = np.round(event.xdata).astype(np.int)
+            y = np.round(event.ydata).astype(np.int)
+            if 0 <= x < self.x_sz and 0 <= y < self.x_sz and (
+                self.roi_x != x or self.roi_y != y
+            ):
+                self.roi_x, self.roi_y = x, y
+                self.roi_rect.set_xy((self.roi_x - .5, self.roi_y - .5))
+                self.update_roi()
+
+    def on_im_click(self, event):
+        if (event.button == 1 and event.inaxes == self.ax[0]):
+            self.roi_locked = False if self.roi_locked else True
+            self.update_roi()
+
+    def update_im(self):
+        self.im.set_data(self.stack[self.z_idx, :, :])
+        self.ax[0].set_ylabel("z = %s" % self.z_idx)
+        self.im.axes.figure.canvas.draw()
+
+    def update_roi(self):
+        msg = "(click to %s)" % ("unlock" if self.roi_locked else "lock")
+        self.ax[1].set_title("x = %i; y = %i; %s" % (self.roi_x, self.roi_y, msg))
+        beam = self.update_beam()
+        self.roi_line.set_ydata(beam)
+        self.z_marker.set_data(self.zaxis[self.z_idx], beam[self.z_idx])
+
+    def connect_events(self):
+        self.fig.canvas.mpl_connect("scroll_event", self.on_scroll)
+        self.fig.canvas.mpl_connect("motion_notify_event", self.on_move)
+        self.fig.canvas.mpl_connect("button_release_event", self.on_im_click)
 
 
 def plot_stack(arr, delta=10, vmin=None, vmax=None, cmap="gray"):
