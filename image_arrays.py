@@ -153,13 +153,11 @@ class StackExplorer:
 
 
 class PeakExplorer:
-    def __init__(self, xaxis, recs, defaults={}):
+    def __init__(self, xaxis, recs, prominence=1, width=2, tolerance=.5, distance=1):
         self.xaxis, self.recs = xaxis, recs
         self.n_rois, self.pts = recs.shape
-        self.thresh = defaults.get("thresh", 1)
-        self.peak_width = defaults.get("peak_width", 2)
-        self.peak_tolerance = defaults.get("peak_tolerance", .5)
-        self.peak_interval = defaults.get("peak_interval", 1)
+        self.prominence, self.width = prominence, width
+        self.tolerance, self.distance = tolerance, distance
 
         self.build_fig()
         self.build_inputs()
@@ -176,69 +174,66 @@ class PeakExplorer:
         self.fig = plt.figure(constrained_layout=True, figsize=(6, 6))
         gs = self.fig.add_gridspec(nrows=3, ncols=2, height_ratios=[.8, .1, .1])
         self.rec_ax = self.fig.add_subplot(gs[0, :])
-        self.thresh_ax = self.fig.add_subplot(gs[1, 0])
+        self.prom_ax = self.fig.add_subplot(gs[1, 0])
         self.width_ax = self.fig.add_subplot(gs[1, 1])
         self.toler_ax = self.fig.add_subplot(gs[2, 0])
-        self.inter_ax = self.fig.add_subplot(gs[2, 1])
+        self.dist_ax = self.fig.add_subplot(gs[2, 1])
         self.rec_ax.set_title("roi = 0")
         self.rec_ax.set_xlabel("Time (s)")
-        self.thresh_ax.set_title("Threshold")
+        self.prom_ax.set_title("Peak Prominence")
         self.width_ax.set_title("Peak Width")
         self.toler_ax.set_title("Peak Tolerance")
-        self.inter_ax.set_title("Peak Interval")
+        self.dist_ax.set_title("Min Distance Between")
 
     def build_inputs(self):
-        self.thresh_box = TextBox(self.thresh_ax, "", initial=str(self.thresh))
+        self.prom_box = TextBox(self.prom_ax, "", initial=str(self.prominence))
+        self.width_box = TextBox(self.width_ax, "", initial=str(self.width))
+        self.toler_box = TextBox(self.toler_ax, "", initial=str(self.tolerance))
+        self.dist_box = TextBox(self.dist_ax, "", initial=str(self.distance))
 
-        self.width_box = TextBox(self.width_ax, "", initial=str(self.peak_width))
-
-        self.toler_box = TextBox(self.toler_ax, "", initial=str(self.peak_tolerance))
-
-        self.inter_box = TextBox(self.inter_ax, "", initial=str(self.peak_interval))
-
-    def set_thresh(self, s):
+    def set_prominence(self, s):
         try:
-            self.thresh = float(s)
+            self.prominence = float(s)
             self.refresh()
         except:
-            self.thresh_box.set_val(str(self.thresh))
+            self.prom_box.set_val(str(self.prominence))
 
-    def set_peak_width(self, s):
+    def set_width(self, s):
         try:
-            self.peak_width = int(s)
+            self.width = int(s)
             self.refresh()
         except:
-            self.width_box.set_val(str(self.peak_width))
+            self.width_box.set_val(str(self.width))
 
-    def set_peak_tolerance(self, s):
+    def set_tolerance(self, s):
         try:
-            a = float(s)
-            if 0 <= a <= 1:
-                self.peak_tolerance = a
+            tolerance = float(s)
+            if 0 <= tolerance <= 1:
+                self.tolerance = tolerance
                 self.refresh()
             else:
-                raise (ValueError("tolerance must be between 0 and 1."))
+                raise (ValueError("Tolerance must be between 0 and 1."))
         except ValueError:
-            self.toler_box.set_val(str(self.peak_tolerance))
+            self.toler_box.set_val(str(self.tolerance))
 
-    def set_peak_interval(self, s):
+    def set_distance(self, s):
         try:
-            a = int(s)
-            if a >= 1:
-                self.peak_interval = a
+            dist = int(s)
+            if dist >= 1:
+                self.distance = dist
                 self.refresh()
             else:
-                raise (ValueError("peak interval must be >= 1"))
+                raise (ValueError("Minimum peak distance must be >= 1"))
         except ValueError:
-            self.inter_box.set_val(str(self.peak_interval))
+            self.dist_box.set_val(str(self.distance))
 
     def update_peaks(self):
         self.peaks, _ = signal.find_peaks(
             self.recs[self.idx],
-            prominence=self.thresh,
-            rel_height=self.peak_tolerance,
-            width=self.peak_width,
-            distance=self.peak_interval
+            prominence=self.prominence,
+            rel_height=self.tolerance,
+            width=self.width,
+            distance=self.distance
         )
 
     def update_view(self):
@@ -261,10 +256,10 @@ class PeakExplorer:
 
     def connect_events(self):
         self.fig.canvas.mpl_connect("scroll_event", self.on_scroll)
-        self.thresh_box.on_submit(self.set_thresh)
-        self.width_box.on_submit(self.set_peak_width)
-        self.toler_box.on_submit(self.set_peak_tolerance)
-        self.inter_box.on_submit(self.set_peak_interval)
+        self.prom_box.on_submit(self.set_prominence)
+        self.width_box.on_submit(self.set_width)
+        self.toler_box.on_submit(self.set_tolerance)
+        self.dist_box.on_submit(self.set_distance)
 
 
 def plot_stack(arr, delta=10, vmin=None, vmax=None, cmap="gray"):
