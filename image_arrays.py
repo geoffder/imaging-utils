@@ -3,6 +3,7 @@ import h5py as h5
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle
+from matplotlib.widgets import TextBox
 from skimage import io
 from scipy import signal
 from PIL import Image
@@ -151,6 +152,121 @@ class StackExplorer:
         self.fig.canvas.mpl_connect("button_release_event", self.on_im_click)
 
 
+class PeakExplorer:
+    def __init__(self, xaxis, recs, defaults={}):
+        self.xaxis, self.recs = xaxis, recs
+        self.n_rois, self.pts = recs.shape
+        self.thresh = defaults.get("thresh", 1)
+        self.peak_width = defaults.get("peak_width", 2)
+        self.peak_tolerance = defaults.get("peak_tolerance", .5)
+        self.peak_interval = defaults.get("peak_interval", 1)
+
+        self.build_fig()
+        self.build_inputs()
+        self.connect_events()
+
+        self.idx = 0
+        self.update_peaks()
+        self.rec_line = self.rec_ax.plot(self.xaxis, self.recs[self.idx])[0]
+        self.peak_line = self.rec_ax.plot(
+            self.xaxis[self.peaks], self.recs[self.idx, self.peaks], "x"
+        )[0]
+
+    def build_fig(self):
+        self.fig = plt.figure(constrained_layout=True, figsize=(6, 6))
+        gs = self.fig.add_gridspec(nrows=3, ncols=2, height_ratios=[.8, .1, .1])
+        self.rec_ax = self.fig.add_subplot(gs[0, :])
+        self.thresh_ax = self.fig.add_subplot(gs[1, 0])
+        self.width_ax = self.fig.add_subplot(gs[1, 1])
+        self.toler_ax = self.fig.add_subplot(gs[2, 0])
+        self.inter_ax = self.fig.add_subplot(gs[2, 1])
+        self.rec_ax.set_title("roi = 0")
+        self.rec_ax.set_xlabel("Time (s)")
+        self.thresh_ax.set_title("Threshold")
+        self.width_ax.set_title("Peak Width")
+        self.toler_ax.set_title("Peak Tolerance")
+        self.inter_ax.set_title("Peak Interval")
+
+    def build_inputs(self):
+        self.thresh_box = TextBox(self.thresh_ax, "", initial=str(self.thresh))
+
+        self.width_box = TextBox(self.width_ax, "", initial=str(self.peak_width))
+
+        self.toler_box = TextBox(self.toler_ax, "", initial=str(self.peak_tolerance))
+
+        self.inter_box = TextBox(self.inter_ax, "", initial=str(self.peak_interval))
+
+    def set_thresh(self, s):
+        try:
+            self.thresh = float(s)
+            self.refresh()
+        except:
+            self.thresh_box.set_val(str(self.thresh))
+
+    def set_peak_width(self, s):
+        try:
+            self.peak_width = int(s)
+            self.refresh()
+        except:
+            self.width_box.set_val(str(self.peak_width))
+
+    def set_peak_tolerance(self, s):
+        try:
+            a = float(s)
+            if 0 <= a <= 1:
+                self.peak_tolerance = a
+                self.refresh()
+            else:
+                raise (ValueError("tolerance must be between 0 and 1."))
+        except ValueError:
+            self.toler_box.set_val(str(self.peak_tolerance))
+
+    def set_peak_interval(self, s):
+        try:
+            a = int(s)
+            if a >= 1:
+                self.peak_interval = a
+                self.refresh()
+            else:
+                raise (ValueError("peak interval must be >= 1"))
+        except ValueError:
+            self.inter_box.set_val(str(self.peak_interval))
+
+    def update_peaks(self):
+        self.peaks, _ = signal.find_peaks(
+            self.recs[self.idx],
+            prominence=self.thresh,
+            rel_height=self.peak_tolerance,
+            width=self.peak_width,
+            distance=self.peak_interval
+        )
+
+    def update_view(self):
+        self.rec_ax.set_title("roi = %i" % self.idx)
+        rec = self.recs[self.idx]
+        self.rec_line.set_ydata(rec)
+        self.peak_line.set_data(self.xaxis[self.peaks], rec[self.peaks])
+        self.rec_ax.set_ylim(rec.min(), rec.max())
+
+    def refresh(self):
+        self.update_peaks()
+        self.update_view()
+
+    def on_scroll(self, event):
+        if event.button == "up":
+            self.idx = (self.idx + 1) % self.n_rois
+        else:
+            self.idx = (self.idx - 1) % self.n_rois
+        self.refresh()
+
+    def connect_events(self):
+        self.fig.canvas.mpl_connect("scroll_event", self.on_scroll)
+        self.thresh_box.on_submit(self.set_thresh)
+        self.width_box.on_submit(self.set_peak_width)
+        self.toler_box.on_submit(self.set_peak_tolerance)
+        self.inter_box.on_submit(self.set_peak_interval)
+
+
 def plot_stack(arr, delta=10, vmin=None, vmax=None, cmap="gray"):
     fig, ax = plt.subplots(1)
     stack = StackPlotter(fig, ax, arr, delta, vmin, vmax, cmap)
@@ -279,7 +395,14 @@ def soft_max(x):
 
 
 def avg_trigger_window(
-    stim_t, stim, rec_t, rec, duration, trigger_idxs, prominences=None
+    stim_t,
+    stim,
+    rec_t,
+    rec,
+    duration,
+    trigger_idxs,
+    prominences=None,
+    max_prominence=None,
 ):
     """Rough implementation of threshold triggered averaging of a stimulus."""
     times = rec_t[trigger_idxs]
@@ -289,7 +412,11 @@ def avg_trigger_window(
     if prominences is None:
         return np.mean(leads, axis=0)
     else:
-        return np.sum(leads * soft_max(prominences[legal].reshape(-1, 1, 1, 1)), axis=0)
+        if max_prominence is not None:
+            proms = np.clip(prominences[legal], 0, max_prominence)
+        else:
+            proms = prominences[legal]
+        return np.sum(leads * soft_max(proms.reshape(-1, 1, 1, 1)), axis=0)
 
 
 def butter_bandpass(lowcut, highcut, sample_rate, order=5):
