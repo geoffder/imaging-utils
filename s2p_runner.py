@@ -64,8 +64,6 @@ def analyze_folder(base_path, diam=8, gif_timestep=200):
         pack_suite2p(sub_s2p_path, out_path, grp, space_dims, gif_timestep, trial_pts=pts)
         shutil.rmtree(os.path.join(sub_path, "suite2p"), ignore_errors=True)
 
-    shutil.rmtree(os.path.join(base_path, "suite2p"))
-
 
 if __name__ == "__main__":
     settings = {}
