@@ -3,7 +3,7 @@ import h5py as h5
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle
-from matplotlib.widgets import TextBox
+from matplotlib.widgets import TextBox, Slider
 from skimage import io
 from scipy import signal
 from PIL import Image
@@ -59,22 +59,50 @@ class StackExplorer:
         cmap="gray",
         **plot_kwargs
     ):
-        if "gridspec_kw" not in plot_kwargs:
-            plot_kwargs["gridspec_kw"] = {"height_ratios": [.7, .3]}
-        self.fig, self.ax = plt.subplots(2, **plot_kwargs)
+        if stack.ndim == 4 and stack.shape[0] > 1:
+            self.trials = True
+            self.avg = np.mean(stack, axis=0)
+            stack = np.concatenate([stack, self.avg.reshape(1, *self.avg.shape)], axis=0)
+            if "gridspec_kw" not in plot_kwargs:
+                plot_kwargs["gridspec_kw"] = {"height_ratios": [.67, .03, .3]}
+            self.fig, self.ax = plt.subplots(3, **plot_kwargs)
+            self.stack_ax, self.slide_ax, self.beam_ax = self.ax
+        else:
+            self.trials = False
+            stack = stack.reshape(1, *stack.shape)
+            if "gridspec_kw" not in plot_kwargs:
+                plot_kwargs["gridspec_kw"] = {"height_ratios": [.7, .3]}
+            self.fig, self.ax = plt.subplots(2, **plot_kwargs)
+            self.stack_ax, self.beam_ax = self.ax
+
         self.stack, self.delta, self.roi_sz = stack, delta, roi_sz
-        self.z_sz, self.y_sz, self.x_sz = stack.shape
-        self.z_idx, self.roi_x, self.roi_y = 0, 0, 0
+        self.n_sz, self.z_sz, self.y_sz, self.x_sz = stack.shape
+        self.n_idx, self.z_idx, self.roi_x, self.roi_y = 0, 0, 0, 0
         self.zaxis = np.arange(self.z_sz) if zaxis is None else zaxis
         self.roi_locked = False
 
         self.build_stack_ax(cmap, vmin, vmax)
         self.build_roi_ax(vmin, vmax)
+        if self.trials:
+            self.build_slide_ax()
+        self.fig.tight_layout(h_pad=0)
         self.connect_events()
 
+    def build_slide_ax(self):
+        self.slider = Slider(
+            self.slide_ax,
+            "",
+            valmin=0,
+            valmax=(self.n_sz - 1),
+            valinit=0,
+            valstep=1,
+            valfmt="%.0f"
+        )
+        self.slide_ax.set_title("trial 0")
+
     def build_stack_ax(self, cmap, vmin, vmax):
-        self.im = self.ax[0].imshow(
-            self.stack[self.z_idx, :, :], cmap=cmap, vmin=vmin, vmax=vmax
+        self.im = self.stack_ax.imshow(
+            self.stack[self.n_idx, self.z_idx, :, :], cmap=cmap, vmin=vmin, vmax=vmax
         )
         self.roi_rect = Rectangle(
             (self.roi_x - .5, self.roi_y - .5),
@@ -84,38 +112,54 @@ class StackExplorer:
             color="red",
             linewidth=2,
         )
-        self.ax[0].add_patch(self.roi_rect)
+        self.stack_ax.add_patch(self.roi_rect)
         self.update_im()
 
     def build_roi_ax(self, vmin, vmax):
-        beam = self.update_beam()
-        self.roi_line = self.ax[1].plot(self.zaxis, beam)[0]
-        self.z_marker = self.ax[1].plot(self.zaxis[self.z_idx], beam[self.z_idx], "x")[0]
-        self.ax[1].set_ylim(vmin, vmax)
+        beams = self.update_beams()
+        self.roi_lines = [self.beam_ax.plot(self.zaxis, b)[0] for b in beams]
+        if self.trials:
+            self.roi_lines[-1].set_linewidth(3)  # avg line thicker
+        self.z_marker = self.beam_ax.plot(
+            self.zaxis[self.z_idx],
+            beams[self.n_idx, self.z_idx],
+            marker="x",
+            c="black",
+            markersize=12
+        )[0]
+        self.beam_ax.set_ylim(vmin, vmax)
         self.update_roi()
 
-    def update_beam(self):
+    def update_beams(self):
         if self.roi_sz > 1:
-            self.beam = np.mean(
-                self.stack[:, self.roi_y:self.roi_y + self.roi_sz,
+            self.beams = np.mean(
+                self.stack[:, :, self.roi_y:self.roi_y + self.roi_sz,
                            self.roi_x:self.roi_x + self.roi_sz],
-                axis=(1, 2)
+                axis=(2, 3)
             )
         else:
-            self.beam = self.stack[:, self.roi_y, self.roi_x]
-        return self.beam
+            self.beams = self.stack[:, :, self.roi_y, self.roi_x]
+        return self.beams
+
+    def on_slide(self, v):
+        self.n_idx = int(v)
+        self.slide_ax.set_title(
+            "trial %i" % self.n_idx if self.n_idx < self.n_sz - 1 else "average"
+        )
+        self.update_im()
+        self.update_roi()
 
     def on_scroll(self, event):
         if event.button == "up":
             self.z_idx = (self.z_idx + self.delta) % self.z_sz
         else:
             self.z_idx = (self.z_idx - self.delta) % self.z_sz
-        self.z_marker.set_data(self.zaxis[self.z_idx], self.beam[self.z_idx])
+        self.z_marker.set_data(self.zaxis[self.z_idx], self.beams[self.n_idx, self.z_idx])
         self.update_im()
 
     def on_move(self, event):
         if (
-            not self.roi_locked and event.inaxes == self.ax[0] and
+            not self.roi_locked and event.inaxes == self.stack_ax and
             not (event.xdata is None or event.ydata is None)
         ):
             x = np.round(event.xdata).astype(np.int)
@@ -128,26 +172,31 @@ class StackExplorer:
                 self.update_roi()
 
     def on_im_click(self, event):
-        if (event.button == 1 and event.inaxes == self.ax[0]):
+        if (event.button == 1 and event.inaxes == self.stack_ax):
             self.roi_locked = False if self.roi_locked else True
             self.update_roi()
 
     def update_im(self):
-        self.im.set_data(self.stack[self.z_idx, :, :])
-        self.ax[0].set_ylabel("z = %s" % self.z_idx)
+        self.im.set_data(self.stack[self.n_idx, self.z_idx, :, :])
+        self.stack_ax.set_ylabel("z = %s" % self.z_idx)
         self.im.axes.figure.canvas.draw()
 
     def update_roi(self):
         msg = "(click to %s)" % ("unlock" if self.roi_locked else "lock")
-        self.ax[1].set_title("x = %i; y = %i; %s" % (self.roi_x, self.roi_y, msg))
-        beam = self.update_beam()
-        self.roi_line.set_ydata(beam)
-        self.z_marker.set_data(self.zaxis[self.z_idx], beam[self.z_idx])
+        self.beam_ax.set_title("x = %i; y = %i; %s" % (self.roi_x, self.roi_y, msg))
+        beams = self.update_beams()
+        for i, line in enumerate(self.roi_lines):
+            line.set_ydata(beams[i])
+            line.set_color("red" if i == self.n_idx else "black")
+            line.set_alpha(1 if i == self.n_idx else 0.75)
+        self.z_marker.set_data(self.zaxis[self.z_idx], beams[self.n_idx, self.z_idx])
 
     def connect_events(self):
         self.fig.canvas.mpl_connect("scroll_event", self.on_scroll)
         self.fig.canvas.mpl_connect("motion_notify_event", self.on_move)
         self.fig.canvas.mpl_connect("button_release_event", self.on_im_click)
+        if self.trials:
+            self.slider.on_changed(self.on_slide)
 
 
 class PeakExplorer:
@@ -387,6 +436,7 @@ def avg_trigger_window(
     trigger_idxs,
     prominences=None,
     max_prominence=None,
+    nonlinear_weighting=True,
 ):
     """Rough implementation of threshold triggered averaging of a stimulus."""
     times = rec_t[trigger_idxs]
@@ -400,7 +450,11 @@ def avg_trigger_window(
             proms = np.clip(prominences[legal], 0, max_prominence)
         else:
             proms = prominences[legal]
-        return np.sum(leads * soft_max(proms.reshape(-1, 1, 1, 1)), axis=0)
+
+        if nonlinear_weighting:
+            return np.sum(leads * soft_max(proms.reshape(-1, 1, 1, 1)), axis=0)
+        else:
+            return np.sum(leads * (proms / np.sum(proms)).reshape(-1, 1, 1, 1), axis=0)
 
 
 def butter_bandpass(lowcut, highcut, sample_rate, order=5):
@@ -424,3 +478,24 @@ def reduce_chunks(arr, chunk_size, reducer=np.sum, axis=-1):
     new_shape = og_shape[:axis] + (-1, chunk_size) + og_shape[axis + 1:]
     arr = arr.reshape(new_shape)
     return reducer(arr, axis=(axis + 1))
+
+
+def find_peaks(arr, *args, **kwargs):
+    """Basic wrapper over scipy.signal.find_peaks adding flexibility on the
+    shape of arr (could have multiple trials on the 0th axis). Currently only
+    taking prominence information from the properties dict. Returns lists since
+    the resulting arrays will be ragged between trials."""
+    if arr.ndim == 1:
+        arr = arr.reshape(1, -1)
+
+    peak_idxs, peak_proms = [], []
+    for x in arr:
+        idxs, props = signal.find_peaks(x, *args, **kwargs)
+        peak_idxs.append(idxs)
+        peak_proms.append(props["prominences"])
+
+    return peak_idxs, peak_proms
+
+
+def moving_avg(arr, width):
+    return np.convolve(arr, np.ones(width) / width, "same")
