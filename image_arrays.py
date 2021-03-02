@@ -437,10 +437,14 @@ def avg_trigger_window(
     prominences=None,
     max_prominence=None,
     nonlinear_weighting=True,
+    start_time=None,
+    end_time=None,
 ):
     """Rough implementation of threshold triggered averaging of a stimulus."""
     times = rec_t[trigger_idxs]
-    legal = (times - duration > np.min(stim_t)) * (times <= np.max(stim_t))
+    start_time = np.min(stim_t) if start_time is None else start_time
+    end_time = np.max(stim_t) if end_time is None else end_time
+    legal = (times - duration > start_time) * (times <= end_time)
     leads = [lead_window(stim_t, stim, t, duration) for t in times[legal]]
 
     if prominences is None:
