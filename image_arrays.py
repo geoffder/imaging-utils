@@ -40,7 +40,7 @@ class StackPlotter:
 
     def update(self):
         self.im.set_data(self.stack[self.idx, :, :])
-        self.ax.set_ylabel("t = %s" % self.idx)
+        self.ax.set_ylabel("z = %s" % self.idx)
         self.im.axes.figure.canvas.draw()
 
     def connect_scroll(self):
@@ -448,7 +448,7 @@ def avg_trigger_window(
     leads = [lead_window(stim_t, stim, t, duration) for t in times[legal]]
 
     if prominences is None:
-        return np.mean(leads, axis=0)
+        window = np.mean(leads, axis=0)
     else:
         if max_prominence is not None:
             proms = np.clip(prominences[legal], 0, max_prominence)
@@ -456,9 +456,11 @@ def avg_trigger_window(
             proms = prominences[legal]
 
         if nonlinear_weighting:
-            return np.sum(leads * soft_max(proms.reshape(-1, 1, 1, 1)), axis=0)
+            window = np.sum(leads * soft_max(proms.reshape(-1, 1, 1, 1)), axis=0)
         else:
-            return np.sum(leads * (proms / np.sum(proms)).reshape(-1, 1, 1, 1), axis=0)
+            window = np.sum(leads * (proms / np.sum(proms)).reshape(-1, 1, 1, 1), axis=0)
+
+    return window, legal
 
 
 def butter_bandpass(lowcut, highcut, sample_rate, order=5):
