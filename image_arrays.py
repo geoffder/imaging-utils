@@ -47,6 +47,72 @@ class StackPlotter:
         self.fig.canvas.mpl_connect("scroll_event", self.onscroll)
 
 
+class MultiStackPlotter:
+    """Stacks must all have the same z size, but other dims can be different."""
+    def __init__(
+        self,
+        stacks,
+        delta=1,
+        vmin=None,
+        vmax=None,
+        n_cols=2,
+        cmap="gray",
+        title_fmt_fun=lambda i: "trial = %i" % i,
+        idx_fmt_fun=lambda i: "z = %i" % i,
+        **plot_kwargs
+    ):
+        self.stacks, self.n_stacks, self.slices = stacks, len(stacks), stacks[0].shape[0]
+        self.delta, self.n_cols = delta, n_cols
+        self.idx_fmt_fun = idx_fmt_fun
+        self.n_rows = np.ceil(self.n_stacks / self.n_cols).astype(np.int)
+        self.fig, self.ax = plt.subplots(self.n_rows, self.n_cols, **plot_kwargs)
+        self.idx = 0
+        self.plots = []
+
+        if vmin is not None and type(vmin) != "dict":
+            vmin = {"default": vmin}
+        elif type(vmin) == "dict" and "default" not in vmin:
+            vmin["default"] = None
+        if vmax is not None and type(vmax) != "dict":
+            vmax = {"default": vmax}
+        elif type(vmax) == "dict" and "default" not in vmax:
+            vmax["default"] = None
+
+        i = 0
+        for row in self.ax:
+            for a in row:
+                if i < self.n_stacks:
+                    self.plots.append(
+                        a.imshow(
+                            self.stacks[i][self.idx, :, :],
+                            cmap=cmap,
+                            vmin=vmin.get(i, vmin["default"]),
+                            vmax=vmax.get(i, vmax["default"]),
+                        )
+                    )
+                    a.set_title(title_fmt_fun(i))
+                else:
+                    a.set_visible(False)
+                i += 1
+        self.update()
+        self.connect_scroll()
+
+    def onscroll(self, event):
+        if event.button == "up":
+            self.idx = (self.idx + self.delta) % self.slices
+        else:
+            self.idx = (self.idx - self.delta) % self.slices
+        self.update()
+
+    def update(self):
+        for s, p in zip(self.stacks, self.plots):
+            p.set_data(s[self.idx, :, :])
+        self.fig.suptitle(self.idx_fmt_fun(self.idx))
+
+    def connect_scroll(self):
+        self.fig.canvas.mpl_connect("scroll_event", self.onscroll)
+
+
 class StackExplorer:
     def __init__(
         self,
@@ -424,6 +490,11 @@ def lead_window(stim_t, stim, stop, duration):
 
 def soft_max(x):
     ex = np.exp(x)
+    return ex / np.sum(ex, axis=0)
+
+
+def soft_min(x):
+    ex = np.exp(-x)
     return ex / np.sum(ex, axis=0)
 
 
