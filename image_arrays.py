@@ -113,6 +113,71 @@ class MultiStackPlotter:
         self.fig.canvas.mpl_connect("scroll_event", self.onscroll)
 
 
+class MultiWavePlotter:
+    def __init__(
+        self,
+        waves,
+        xaxis=None,
+        delta=1,
+        ymin=None,
+        ymax=None,
+        n_cols=1,
+        title_fmt_fun=lambda i: "trial = %i" % i,
+        idx_fmt_fun=lambda i: "z = %i" % i,
+        **plot_kwargs
+    ):
+        self.waves, self.n_waves, self.slices = waves, len(waves), waves[0].shape[0]
+        self.delta, self.n_cols = delta, n_cols
+        self.idx_fmt_fun = idx_fmt_fun
+        self.n_rows = np.ceil(self.n_waves / self.n_cols).astype(np.int)
+        self.fig, self.ax = plt.subplots(self.n_rows, self.n_cols, **plot_kwargs)
+        self.idx = 0
+        self.lines = {i: [] for i in range(self.n_waves)}
+
+        if ymin is not None and type(ymin) != "dict":
+            ymin = {"default": ymin}
+        elif type(ymin) == "dict" and "default" not in ymin:
+            ymin["default"] = None
+        if ymax is not None and type(ymax) != "dict":
+            ymax = {"default": ymax}
+        elif type(ymax) == "dict" and "default" not in ymax:
+            ymax["default"] = None
+
+        i = 0
+        for row in self.ax:
+            row = row if type(row) == list else [row]
+            for a in row:
+                if i < self.n_waves:
+                    for w in self.waves[i][self.idx]:
+                        if xaxis is None:
+                            self.lines[i].append(a.plot(w)[0])
+                        else:
+                            self.lines[i].append(a.plot(xaxis, w)[0])
+                    a.set_title(title_fmt_fun(i))
+                    a.set_ylim(ymin.get(i, ymin["default"]), ymax.get(i, ymax["default"]))
+                else:
+                    a.set_visible(False)
+                i += 1
+        self.update()
+        self.connect_scroll()
+
+    def onscroll(self, event):
+        if event.button == "up":
+            self.idx = (self.idx + self.delta) % self.slices
+        else:
+            self.idx = (self.idx - self.delta) % self.slices
+        self.update()
+
+    def update(self):
+        for ws, ls in zip(self.waves, self.lines.values()):
+            for w, l in zip(ws[self.idx], ls):
+                l.set_ydata(w)
+        self.fig.suptitle(self.idx_fmt_fun(self.idx))
+
+    def connect_scroll(self):
+        self.fig.canvas.mpl_connect("scroll_event", self.onscroll)
+
+
 class StackExplorer:
     def __init__(
         self,
