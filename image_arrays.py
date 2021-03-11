@@ -641,3 +641,11 @@ def find_peaks(arr, *args, **kwargs):
 
 def moving_avg(arr, width):
     return np.convolve(arr, np.ones(width) / width, "same")
+
+
+def quality_index(arr):
+    """Variance of the mean of trials divided by the mean of the variance of
+    each trial. This gives an index of the quality of the signal by measuring
+    how much of the variance in each trial explained by signals present across
+    all trials."""
+    return np.var(np.mean(arr, axis=0)) / np.mean(np.var(arr, axis=1))
