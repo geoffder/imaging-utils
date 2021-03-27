@@ -188,6 +188,7 @@ class StackExplorer:
         vmin=None,
         vmax=None,
         cmap="gray",
+        slide_fmt_fun=None,
         **plot_kwargs
     ):
         if stack.ndim == 4 and stack.shape[0] > 1:
@@ -198,6 +199,9 @@ class StackExplorer:
                 plot_kwargs["gridspec_kw"] = {"height_ratios": [.67, .03, .3]}
             self.fig, self.ax = plt.subplots(3, **plot_kwargs)
             self.stack_ax, self.slide_ax, self.beam_ax = self.ax
+            self.slide_fmt_fun = (
+                lambda i: "trial %i" % i
+            ) if slide_fmt_fun is None else slide_fmt_fun
         else:
             self.trials = False
             stack = stack.reshape(1, *stack.shape)
@@ -229,7 +233,7 @@ class StackExplorer:
             valstep=1,
             valfmt="%.0f"
         )
-        self.slide_ax.set_title("trial 0")
+        self.slide_ax.set_title(self.slide_fmt_fun(0))
 
     def build_stack_ax(self, cmap, vmin, vmax):
         self.im = self.stack_ax.imshow(
@@ -275,7 +279,7 @@ class StackExplorer:
     def on_slide(self, v):
         self.n_idx = int(v)
         self.slide_ax.set_title(
-            "trial %i" % self.n_idx if self.n_idx < self.n_sz - 1 else "average"
+            self.slide_fmt_fun(self.n_idx) if self.n_idx < self.n_sz - 1 else "average"
         )
         self.update_im()
         self.update_roi()
@@ -331,11 +335,21 @@ class StackExplorer:
 
 
 class PeakExplorer:
-    def __init__(self, xaxis, recs, prominence=1, width=2, tolerance=.5, distance=1):
+    def __init__(
+        self,
+        xaxis,
+        recs,
+        prominence=1,
+        width=2,
+        tolerance=.5,
+        distance=1,
+        title_fmt_fun=lambda i: "roi = %i" % i
+    ):
         self.xaxis, self.recs = xaxis, recs
         self.n_rois, self.pts = recs.shape
         self.prominence, self.width = prominence, width
         self.tolerance, self.distance = tolerance, distance
+        self.title_fmt_fun = title_fmt_fun
 
         self.build_fig()
         self.build_inputs()
@@ -356,7 +370,7 @@ class PeakExplorer:
         self.width_ax = self.fig.add_subplot(gs[1, 1])
         self.toler_ax = self.fig.add_subplot(gs[2, 0])
         self.dist_ax = self.fig.add_subplot(gs[2, 1])
-        self.rec_ax.set_title("roi = 0")
+        self.rec_ax.set_title(self.title_fmt_fun(0))
         self.rec_ax.set_xlabel("Time (s)")
         self.prom_ax.set_title("Peak Prominence")
         self.width_ax.set_title("Peak Width")
@@ -415,7 +429,7 @@ class PeakExplorer:
         )
 
     def update_view(self):
-        self.rec_ax.set_title("roi = %i" % self.idx)
+        self.rec_ax.set_title(self.title_fmt_fun(self.idx))
         rec = self.recs[self.idx]
         self.rec_line.set_ydata(rec)
         self.peak_line.set_data(self.xaxis[self.peaks], rec[self.peaks])
@@ -644,8 +658,8 @@ def moving_avg(arr, width):
 
 
 def quality_index(arr):
-    """Variance of the mean of trials divided by the mean of the variance of
-    each trial. This gives an index of the quality of the signal by measuring
-    how much of the variance in each trial explained by signals present across
-    all trials."""
+    """Variance of the mean of trials over the mean of the variance of each
+    individual trial. This gives an index of the quality of the signal by
+    measuring how much of the variance in each trial explained by signals
+    present across all trials."""
     return np.var(np.mean(arr, axis=0)) / np.mean(np.var(arr, axis=1))
