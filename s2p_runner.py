@@ -22,7 +22,7 @@ def is_tiff(name):
     return (name.endswith(".tiff") or name.endswith(".tif"))
 
 
-def analyze_folder(base_path, diam=8, gif_timestep=200):
+def analyze_folder(base_path, diam=8, gif_timestep=200, gen_movies=False):
     contents = os.listdir(base_path)
     names = [f for f in contents if is_tiff(f)]
     stacks = [io.imread(os.path.join(base_path, f)) for f in names]
@@ -47,7 +47,14 @@ def analyze_folder(base_path, diam=8, gif_timestep=200):
         db["tiff_list"] = [name]
         _out_ops = run_s2p(ops, db)
         out_name = re.sub("\.tif?[f]", "", name)
-        pack_suite2p(s2p_path, out_path, out_name, stack.shape[1:], gif_timestep)
+        pack_suite2p(
+            s2p_path,
+            out_path,
+            out_name,
+            stack.shape[1:],
+            gif_timestep,
+            denoised_movies=gen_movies
+        )
 
     for grp, tiff_list in sub_groups.items():
         sub_path = os.path.join(base_path, grp)
@@ -80,4 +87,5 @@ if __name__ == "__main__":
         os.getcwd(),
         diam=int(settings.get("diam", 8)),
         gif_timestep=int(settings.get("gif_timestep", 200)),
+        gen_movies=bool(int(settings.get("gen_movies", 0)))
     )

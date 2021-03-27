@@ -121,7 +121,8 @@ def pack_suite2p(
     space_dims,
     gif_timestep,
     trial_pts=None,
-    exclude_non_cells=False
+    exclude_non_cells=False,
+    denoised_movies=False,
 ):
     recs, neu, stats = get_suite2p_data(s2p_pth, exclude_non_cells)
 
@@ -137,14 +138,18 @@ def pack_suite2p(
 
     n_pts = recs.shape[1]
     masks = create_masks(stats, space_dims)
-    denoised = roi_movie(recs - neu * 0.7, stats, (n_pts, *space_dims))
 
     # masks and denoised axes transposed to fit with IgorPro conventions
     data = {
         "pixels": pixels,
         "masks": masks.transpose(2, 1, 0),  # N to last dim, swap X and Y
-        "denoised": denoised.transpose(2, 1, 0),  # time to last dim, swap X and Y
     }
+
+    if denoised_movies:
+        denoised = roi_movie(recs - neu * 0.7, stats, (n_pts, *space_dims))
+        data["denoised"] = denoised.transpose(2, 1, 0)  # time to last dim, swap X and Y
+        array_to_gif(out_path, out_name + "_denoised", denoised, timestep=gif_timestep)
+        del denoised
 
     if trial_pts is None:
         data["recs"] = recs
@@ -156,9 +161,8 @@ def pack_suite2p(
             data[name] = {"recs": recs[:, t0:t1], "Fneu": neu[:, t0:t1]}
             t0 = t1
 
-    array_to_gif(out_path, out_name + "_denoised", denoised, timestep=gif_timestep)
     pack_hdf(os.path.join(out_path, out_name), data)
-    del (recs, neu, pixels, masks, denoised)
+    del (recs, neu, pixels, masks)
 
 
 if __name__ == "__main__":
@@ -195,4 +199,5 @@ if __name__ == "__main__":
         trial_pts=trial_pts,
         gif_timestep=int(settings.get("gif_timestep", 200)),
         exclude_non_cells=int(settings.get("only_cells", 0)),
+        denoised_movies=True,
     )
