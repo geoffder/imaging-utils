@@ -24,7 +24,13 @@ def is_tiff(name):
 
 
 def analyze_folder(
-    base_path, diam=8, connected=0, allow_overlap=0, gif_timestep=200, gen_movies=False
+    base_path,
+    diam=8,
+    connected=0,
+    allow_overlap=0,
+    exclude_non_cells=0,
+    gif_timestep=200,
+    gen_movies=False
 ):
     contents = os.listdir(base_path)
     names = [f for f in contents if is_tiff(f)]
@@ -56,7 +62,8 @@ def analyze_folder(
             out_name,
             stack.shape[1:],
             gif_timestep,
-            denoised_movies=gen_movies
+            exclude_non_cells=exclude_non_cells,
+            denoised_movies=gen_movies,
         )
 
     for grp, tiff_list in sub_groups.items():
@@ -71,7 +78,16 @@ def analyze_folder(
         shutil.rmtree(os.path.join(sub_path, "suite2p"), ignore_errors=True)
         db = {"data_path": [sub_path], "tiff_list": tiff_list}
         _out_ops = run_s2p(ops, db)
-        pack_suite2p(sub_s2p_path, out_path, grp, space_dims, gif_timestep, trial_pts=pts)
+        pack_suite2p(
+            sub_s2p_path,
+            out_path,
+            grp,
+            space_dims,
+            gif_timestep,
+            trial_pts=pts,
+            exclude_non_cells=exclude_non_cells,
+            denoised_movies=gen_movies,
+        )
         shutil.rmtree(os.path.join(sub_path, "suite2p"), ignore_errors=True)
 
 
@@ -91,6 +107,7 @@ if __name__ == "__main__":
         diam=int(settings.get("diam", 8)),
         connected=int(settings.get("connected", 0)),
         allow_overlap=int(settings.get("allow_overlap", 0)),
+        exclude_non_cells=int(settings.get("only_cells", 0)),
         gif_timestep=int(settings.get("gif_timestep", 200)),
         gen_movies=bool(int(settings.get("gen_movies", 0)))
     )

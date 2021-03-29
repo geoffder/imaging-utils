@@ -44,7 +44,7 @@ def array_to_gif(pth, fname, arr, max_val=None, downsample=1, time_ax=0, timeste
     save_frames(os.path.join(pth, fname), "gif", frames, timestep=timestep)
 
 
-def get_suite2p_data(pth, exclude_non_cells=True):
+def get_suite2p_data(pth, exclude_non_cells=False):
     """Load extracted recordings (raw fluoresence (F), neuropil (Fneu)) and cell
     information (stat, which includes ROI pixels (xpix, ypix) and their
     weighting (lam)) from the given suite2p output folder.
