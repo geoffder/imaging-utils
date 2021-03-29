@@ -199,5 +199,5 @@ if __name__ == "__main__":
         trial_pts=trial_pts,
         gif_timestep=int(settings.get("gif_timestep", 200)),
         exclude_non_cells=int(settings.get("only_cells", 0)),
-        denoised_movies=True,
+        denoised_movies=bool(int(settings.get("gen_movies", 0)))
     )
