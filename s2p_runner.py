@@ -9,12 +9,13 @@ from suite2p import run_s2p, default_ops
 from s2p_packer import pack_suite2p
 
 
-def bipolar_ops(diam=8, allow_overlap=True):
+def bipolar_ops(diam=8, connected=False, allow_overlap=False):
     ops = default_ops()
     ops["spikedetect"] = False
     ops["sparse_mode"] = False
     ops["diameter"] = diam
     ops["allow_overlap"] = allow_overlap
+    ops["connected"] = connected
     return ops
 
 
@@ -22,7 +23,9 @@ def is_tiff(name):
     return (name.endswith(".tiff") or name.endswith(".tif"))
 
 
-def analyze_folder(base_path, diam=8, gif_timestep=200, gen_movies=False):
+def analyze_folder(
+    base_path, diam=8, connected=0, allow_overlap=0, gif_timestep=200, gen_movies=False
+):
     contents = os.listdir(base_path)
     names = [f for f in contents if is_tiff(f)]
     stacks = [io.imread(os.path.join(base_path, f)) for f in names]
@@ -39,7 +42,7 @@ def analyze_folder(base_path, diam=8, gif_timestep=200, gen_movies=False):
     os.makedirs(out_path, exist_ok=True)
 
     s2p_path = os.path.join(base_path, "suite2p", "plane0")
-    ops = bipolar_ops(diam=diam)
+    ops = bipolar_ops(diam=diam, connected=connected, allow_overlap=allow_overlap)
     db = {"data_path": [base_path]}
 
     for name, stack in zip(names, stacks):
@@ -86,6 +89,8 @@ if __name__ == "__main__":
     analyze_folder(
         os.getcwd(),
         diam=int(settings.get("diam", 8)),
+        connected=int(settings.get("connected", 0)),
+        allow_overlap=int(settings.get("allow_overlap", 0)),
         gif_timestep=int(settings.get("gif_timestep", 200)),
         gen_movies=bool(int(settings.get("gen_movies", 0)))
     )
