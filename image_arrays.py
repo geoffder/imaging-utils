@@ -595,7 +595,8 @@ def avg_trigger_window(
     start_time = np.min(stim_t) if start_time is None else start_time
     end_time = np.max(stim_t) if end_time is None else end_time
     legal = (times - duration > start_time) * (times <= end_time)
-    leads = [lead_window(stim_t, stim, t, duration) for t in times[legal]]
+    times = times[legal]
+    leads = [lead_window(stim_t, stim, t, duration) for t in times]
 
     if prominences is None:
         window = np.mean(leads, axis=0)
@@ -610,7 +611,7 @@ def avg_trigger_window(
         else:
             window = np.sum(leads * (proms / np.sum(proms)).reshape(-1, 1, 1, 1), axis=0)
 
-    return window, legal
+    return window, times
 
 
 def butter_bandpass(lowcut, highcut, sample_rate, order=5):
