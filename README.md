@@ -41,7 +41,15 @@ extended over time as needed.
   dict](https://github.com/MouseLand/suite2p/blob/main/suite2p/run_s2p.py) by
   the same names as detailed in their
   [docs](https://suite2p.readthedocs.io/en/latest/settings.html#main-settings).
-  In addition the options listed below for `s2p_packer.py` can also be given to
+  Note that the following defaults are changed from the values in suite2p's
+  `default_ops` for the bipolar GluSnfr use case, though they can be overwritten
+  with arguments provided to the script as with the others:
+    * spikedetect = False
+    * sparse_mode = False
+    * diameter = 8
+    * allow_overlap = False
+    * connected = False
+* In addition the options listed below for `s2p_packer.py` can also be given to
   this script, as the same code is responsible for exporting the results into
   hdf5 archives after the analysis by suite2p is complete.
 
