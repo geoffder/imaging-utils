@@ -36,10 +36,14 @@ extended over time as needed.
   found at the root level as usual.
 * Configuration options are added as additional (optional) arguments with the form
   `arg=val`, like so:
-  * `s2p_runner.py diam=8 gif_timestep=100`
-* Currently available options are:
-  * `diam`: number of pixels diameter of "cell" ROIs to look for
-  * `gif_timestep`: milliseconds per frame for the generated gifs
+  * `s2p_runner.py diameter=8 gen_movies=1 gif_timestep=100`
+* Currently available options incude all those in the [suite2p opts
+  dict](https://github.com/MouseLand/suite2p/blob/main/suite2p/run_s2p.py) by
+  the same names as detailed in their
+  [docs](https://suite2p.readthedocs.io/en/latest/settings.html#main-settings).
+  In addition the options listed below for `s2p_packer.py` can also be given to
+  this script, as the same code is responsible for exporting the results into
+  hdf5 archives after the analysis by suite2p is complete.
 
 ### s2p_packer.py
 * This script will re-pack an existing **suite2p** folder into and hdf5, and
@@ -48,6 +52,8 @@ extended over time as needed.
   the whole folder was used) that has already been analysed using the `suite2p` GUI.
 * Usage is otherwise similar to `s2p_runner.py`.
 * Currently available options are:
+  * `gen_movies`: (0 or 1) whether to generate denoised movies (memory
+    intensive). Off (0) by default.
   * `gif_timestep`: milliseconds per frame for the generated gif
   * `only_cells`: (0 or 1) If 1, ROIs predicted as non-cells by suite2p will
     not be included in the hdf5 data, otherwise all are included (default).
