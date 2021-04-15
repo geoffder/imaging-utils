@@ -3,32 +3,39 @@ import os
 import shutil
 import re
 
+import numpy as np
 from functools import reduce
 from skimage import io
 from skimage.measure import block_reduce
 
 from image_arrays import *
 
-# TODO: pre-treat stacks
-# - QI threshold (muti-trial only) [zero out pixels that fail?]
-# - signal/noise threshold
+
+def is_tiff(name):
+    return (name.endswith(".tiff") or name.endswith(".tif"))
 
 
 def compose(f, g):
     return lambda a: f(g(a))
 
 
+def prepare_full_path(load_path, label, out_path=None):
+    load_folder, name = os.path.split(load_path)
+    n, ext = os.path.splitext(name)
+    new_name = "%s_%s%s" % (n, label, ext)
+    if out_path is None:
+        return os.path.join(load_folder, new_name)
+    else:
+        os.makedirs(out_path, exist_ok=True)
+        return os.path.join(out_path, new_name)
+
+
 def map_tiff(f, pth, label, out_pth=None):
     """Load a tiff from file, process it with the given function `f` and save
     the result."""
-    if out_pth is None:
-        full_pth = os.path.join(os.path.splitext(pth)[0], label, ".tif")
-    else:
-        os.makedirs(out_pth, exist_ok=True)
-        full_pth = os.path.join(out_pth, os.path.split(pth)[1], label, ".tif")
-
+    full_out_path = prepare_full_path(pth, label, out_pth)
     mapped = f(io.imread(os.path.join(pth)))
-    imsave(full_pth, normalize_uint16(remove_offset(mapped)))
+    imsave(full_out_path, normalize_uint16(remove_offset(mapped)))
 
 
 def pipeline_map_tiff(pth, label, *funcs, out_pth=None):
@@ -38,6 +45,20 @@ def pipeline_map_tiff(pth, label, *funcs, out_pth=None):
     map_tiff(f, pth, label, out_pth=out_pth)
 
 
+def multi_trial_tiff_pipeline(pth, label, *funcs, out_pth=None):
+    """Like `pipeline_map_tiff`, but processes the folder given by path as set
+    of trials performed on the same scan field, with the same stimuli. Thus, the
+    given `funcs` should all be able to operate on 4-dimensional arrays of shape
+    (Trials, Time, X, Y). After processing by the pipeline, the trials are split
+    and saved as separate tiffs."""
+    names = [f for f in os.listdir(pth) if (f.endswith(".tiff") or f.endswith(".tif"))]
+    stacks = np.stack([io.imread(os.path.join(pth, f)) for f in names], axis=0)
+    mapped = reduce(compose, funcs, lambda a: a)(stacks)
+    for name, s in zip(names, normalize_uint16(remove_offset(mapped))):
+        full_out_path = prepare_full_path(os.path.join(pth, name), label, out_pth)
+        imsave(full_out_path, s)
+
+
 def block_reduce_tiff(pth, reducer, block_size=(1, 2, 2), pad_val=0, **reducer_kwargs):
     """Load a tiff from file, process it with block_reduce and save the result."""
     f = lambda a: block_reduce(a, block_size, reducer, pad_val, reducer_kwargs)
@@ -45,9 +66,53 @@ def block_reduce_tiff(pth, reducer, block_size=(1, 2, 2), pad_val=0, **reducer_k
     map_tiff(f, pth, label)
 
 
-def qi_threshold():
-    pass
+def qi_threshold(arr, thresh, mask_val=0):
+    """Replace pixels/beams that do not pass the target signal-to-noise ratio."""
+    n_trials, t, x, y = arr.shape
+    mask = np.stack(
+        [
+            quality_index(beams)
+            for beams in arr.reshape(n_trials, t, -1).transpose(2, 0, 1)
+        ],
+        axis=0
+    ).reshape(x, y) > thresh
+    arr[:, :, mask] = mask_val
+    return arr
 
 
-def snr_threshold():
-    pass
+def snr_threshold(arr, bsln_start, bsln_end, stim_start, stim_end, thresh, mask_val=0):
+    """Replace pixels/beams that do not pass the target signal-to-noise ratio
+    with the given `mask_val`. This is done on a trial by trial basis, to the
+    expected input is a three dimensional Time x Space array."""
+    bsln_var = np.var(arr[bsln_start:bsln_end], axis=0)
+    stim_var = np.var(arr[stim_start:stim_end], axis=0)
+    mask = (stim_var / bsln_var) > thresh
+    arr[:, mask] = mask_val
+    return arr
+
+
+def process_folders(base_path, new_base, *funcs, multi_trial=True):
+    def loop(child_path):
+        pth = os.path.join(base_path, child_path)
+        contents = os.listdir(pth)
+        names, children = [], []
+        for c in contents:
+            if is_tiff(c):
+                names.append(c)
+            elif os.path.isdir(os.path.join(pth, c)):
+                loop(os.path.join(child_path, c))
+        if len(names) > 0:
+            if multi_trial:
+                multi_trial_tiff_pipeline(
+                    pth, "", *funcs, out_pth=os.path.join(new_base, child_path)
+                )
+            else:
+                for n in names:
+                    pipeline_map_tiff(
+                        os.path.join(pth, n),
+                        "",
+                        *funcs,
+                        out_pth=os.path.join(new_base, child_path)
+                    )
+
+    loop("")
