@@ -66,6 +66,13 @@ def block_reduce_tiff(pth, reducer, block_size=(1, 2, 2), pad_val=0, **reducer_k
     map_tiff(f, pth, label)
 
 
+def crop_sides(arr, x_edge, y_edge):
+    if arr.ndim > 3:
+        return arr[:, :, x_edge:-x_edge, y_edge:-y_edge]
+    else:
+        return arr[:, x_edge:-x_edge, y_edge:-y_edge]
+
+
 def qi_threshold(arr, thresh, mask_val=0):
     """Replace pixels/beams that do not pass the target signal-to-noise ratio."""
     n_trials, t, x, y = arr.shape
