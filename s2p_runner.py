@@ -17,6 +17,7 @@ from s2p_packer import pack_suite2p
 def bipolar_ops():
     """Minor modifications to the default settings found in default_ops."""
     ops = default_ops()
+    ops["do_registration"] = False
     ops["spikedetect"] = False
     ops["sparse_mode"] = False
     ops["diameter"] = 8
