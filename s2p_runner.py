@@ -96,9 +96,11 @@ if __name__ == "__main__":
     for arg in sys.argv[1:]:
         try:
             k, v = arg.split("=")
+            v = int(v)
         except:
             msg = "Invalid argument format. Given %s, but expecting " % arg
-            msg += "a key value pair delimited by '=' (e.g. diam=8)."
+            msg += "a key value pair delimited by '=' (e.g. diam=8). "
+            msg += "All argument values should be numbers."
             print(msg)
         settings[k] = v
 
