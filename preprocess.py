@@ -16,7 +16,7 @@ def is_tiff(name):
 
 
 def compose(f, g):
-    return lambda a: f(g(a))
+    return lambda a: g(f(a))
 
 
 def prepare_full_path(load_path, label, out_path=None):
@@ -67,10 +67,14 @@ def block_reduce_tiff(pth, reducer, block_size=(1, 2, 2), pad_val=0, **reducer_k
 
 
 def crop_sides(arr, x_edge, y_edge):
+    x_size = arr.shape[-2]
+    y_size = arr.shape[-1]
     if arr.ndim > 3:
-        return arr[:, :, x_edge:-x_edge, y_edge:-y_edge]
+        a = arr[:, :, x_edge:(x_size - x_edge), y_edge:(y_size - y_edge)]
+        print(a.shape)
+        return a
     else:
-        return arr[:, x_edge:-x_edge, y_edge:-y_edge]
+        return arr[:, x_edge:(x_size - x_edge), y_edge:(y_size - y_edge)]
 
 
 def qi_threshold(arr, thresh, mask_val=0):
@@ -98,7 +102,7 @@ def snr_threshold(arr, bsln_start, bsln_end, stim_start, stim_end, thresh, mask_
     return arr
 
 
-def process_folders(base_path, new_base, *funcs, multi_trial=True):
+def process_folders(base_path, new_base, *funcs, ignore_dirs={"noise"}, multi_trial=True):
     def loop(child_path):
         pth = os.path.join(base_path, child_path)
         contents = os.listdir(pth)
@@ -107,7 +111,8 @@ def process_folders(base_path, new_base, *funcs, multi_trial=True):
             if is_tiff(c):
                 names.append(c)
             elif os.path.isdir(os.path.join(pth, c)):
-                loop(os.path.join(child_path, c))
+                if c not in ignore_dirs:
+                    loop(os.path.join(child_path, c))
         if len(names) > 0:
             if multi_trial:
                 multi_trial_tiff_pipeline(
