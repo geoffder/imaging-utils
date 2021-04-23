@@ -67,13 +67,12 @@ def block_reduce_tiff(pth, reducer, block_size=(1, 2, 2), pad_val=0, **reducer_k
 
 
 def crop_sides(arr, x_edge, y_edge):
-    x_size = arr.shape[-2]
-    y_size = arr.shape[-1]
+    y_size = arr.shape[-2]
+    x_size = arr.shape[-1]
     if arr.ndim > 3:
-        a = arr[:, :, x_edge:(x_size - x_edge), y_edge:(y_size - y_edge)]
-        return a
+        return arr[:, :, y_edge:(y_size - y_edge), x_edge:(x_size - x_edge)]
     else:
-        return arr[:, x_edge:(x_size - x_edge), y_edge:(y_size - y_edge)]
+        return arr[:, y_edge:(y_size - y_edge), x_edge:(x_size - x_edge)]
 
 
 def qi_threshold(arr, thresh, mask_val=0):
@@ -111,9 +110,9 @@ def process_folders(base_path, new_base, *funcs, copy_dirs={"noise"}, multi_tria
                 names.append(c)
             elif os.path.isdir(os.path.join(pth, c)):
                 if c in copy_dirs:
-                    shutil.copytree(
-                        os.path.join(pth, c), os.path.join(new_base, child_path, c)
-                    )
+                    dest = os.path.join(new_base, child_path, c)
+                    if not os.path.exists(dest):
+                        shutil.copytree(os.path.join(pth, c), dest)
                 else:
                     loop(os.path.join(child_path, c))
         if len(names) > 0:
