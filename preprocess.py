@@ -71,7 +71,6 @@ def crop_sides(arr, x_edge, y_edge):
     y_size = arr.shape[-1]
     if arr.ndim > 3:
         a = arr[:, :, x_edge:(x_size - x_edge), y_edge:(y_size - y_edge)]
-        print(a.shape)
         return a
     else:
         return arr[:, x_edge:(x_size - x_edge), y_edge:(y_size - y_edge)]
@@ -102,7 +101,7 @@ def snr_threshold(arr, bsln_start, bsln_end, stim_start, stim_end, thresh, mask_
     return arr
 
 
-def process_folders(base_path, new_base, *funcs, ignore_dirs={"noise"}, multi_trial=True):
+def process_folders(base_path, new_base, *funcs, copy_dirs={"noise"}, multi_trial=True):
     def loop(child_path):
         pth = os.path.join(base_path, child_path)
         contents = os.listdir(pth)
@@ -111,7 +110,11 @@ def process_folders(base_path, new_base, *funcs, ignore_dirs={"noise"}, multi_tr
             if is_tiff(c):
                 names.append(c)
             elif os.path.isdir(os.path.join(pth, c)):
-                if c not in ignore_dirs:
+                if c in copy_dirs:
+                    shutil.copytree(
+                        os.path.join(pth, c), os.path.join(new_base, child_path, c)
+                    )
+                else:
                     loop(os.path.join(child_path, c))
         if len(names) > 0:
             if multi_trial:
