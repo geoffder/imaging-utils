@@ -188,44 +188,77 @@ class StackExplorer:
         vmin=None,
         vmax=None,
         cmap="gray",
-        slide_fmt_fun=None,
+        n_fmt_fun=None,
+        trial_fmt_fun=None,
         **plot_kwargs
     ):
-        if stack.ndim == 4 and stack.shape[0] > 1:
-            self.trials = True
-            self.avg = np.mean(stack, axis=0)
-            stack = np.concatenate([stack, self.avg.reshape(1, *self.avg.shape)], axis=0)
-            if "gridspec_kw" not in plot_kwargs:
-                plot_kwargs["gridspec_kw"] = {"height_ratios": [.67, .03, .3]}
-            self.fig, self.ax = plt.subplots(3, **plot_kwargs)
-            self.stack_ax, self.slide_ax, self.beam_ax = self.ax
-            self.slide_fmt_fun = (
-                lambda i: "trial %i" % i
-            ) if slide_fmt_fun is None else slide_fmt_fun
+        if stack.ndim > 3:
+            if stack.ndim == 5 and stack.shape[0] > 1:
+                self.ns = True
+                self.trials = stack.shape[1] > 1
+            elif stack.shape[0] > 1:
+                self.trials = True
+                self.ns = False
+            else:
+                self.ns, self.trials = False, False
+
+            if self.trials:
+                if stack.ndim < 5:
+                    stack = stack.reshape(1, *stack.shape)
+
+                self.avg = np.mean(stack, axis=1, keepdims=True)
+                stack = np.concatenate([stack, self.avg], axis=1)
+                self.trials = True
+
+            if self.ns or self.trials:
+                if "gridspec_kw" not in plot_kwargs:
+                    if self.ns and self.trials:
+                        plot_kwargs["gridspec_kw"] = {
+                            "height_ratios": [.64, .03, .03, .3]
+                        }
+                    else:
+                        plot_kwargs["gridspec_kw"] = {"height_ratios": [.67, .03, .3]}
+                self.fig, self.ax = plt.subplots(2 + self.ns + self.trials, **plot_kwargs)
+
+                if self.ns and self.trials:
+                    self.stack_ax, self.n_slide_ax, self.trial_slide_ax, self.beam_ax = self.ax
+                elif self.ns:
+                    self.stack_ax, self.n_slide_ax, self.beam_ax = self.ax
+                else:
+                    self.stack_ax, self.trial_slide_ax, self.beam_ax = self.ax
+
+                self.n_fmt_fun = (
+                    lambda i: "N %i" % i
+                ) if n_fmt_fun is None else n_fmt_fun
+                self.trial_fmt_fun = (
+                    lambda i: "trial %i" % i
+                ) if trial_fmt_fun is None else trial_fmt_fun
         else:
-            self.trials = False
-            stack = stack.reshape(1, *stack.shape)
+            self.ns, self.trials = False, False
+            stack = stack.reshape(1, 1, *stack.shape)
             if "gridspec_kw" not in plot_kwargs:
                 plot_kwargs["gridspec_kw"] = {"height_ratios": [.7, .3]}
             self.fig, self.ax = plt.subplots(2, **plot_kwargs)
             self.stack_ax, self.beam_ax = self.ax
 
         self.stack, self.delta, self.roi_sz = stack, delta, roi_sz
-        self.n_sz, self.z_sz, self.y_sz, self.x_sz = stack.shape
-        self.n_idx, self.z_idx, self.roi_x, self.roi_y = 0, 0, 0, 0
+        self.n_sz, self.tr_sz, self.z_sz, self.y_sz, self.x_sz = stack.shape
+        self.n_idx, self.tr_idx, self.z_idx, self.roi_x, self.roi_y = 0, 0, 0, 0, 0
         self.zaxis = np.arange(self.z_sz) if zaxis is None else zaxis
         self.roi_locked = False
 
         self.build_stack_ax(cmap, vmin, vmax)
         self.build_roi_ax(vmin, vmax)
+        if self.ns:
+            self.build_n_slide_ax()
         if self.trials:
-            self.build_slide_ax()
+            self.build_trial_slide_ax()
         self.fig.tight_layout(h_pad=0)
         self.connect_events()
 
-    def build_slide_ax(self):
-        self.slider = Slider(
-            self.slide_ax,
+    def build_n_slide_ax(self):
+        self.n_slider = Slider(
+            self.n_slide_ax,
             "",
             valmin=0,
             valmax=(self.n_sz - 1),
@@ -233,11 +266,26 @@ class StackExplorer:
             valstep=1,
             valfmt="%.0f"
         )
-        self.slide_ax.set_title(self.slide_fmt_fun(0))
+        self.n_slide_ax.set_title(self.n_fmt_fun(0))
+
+    def build_trial_slide_ax(self):
+        self.trial_slider = Slider(
+            self.trial_slide_ax,
+            "",
+            valmin=0,
+            valmax=(self.tr_sz - 1),
+            valinit=0,
+            valstep=1,
+            valfmt="%.0f"
+        )
+        self.trial_slide_ax.set_title(self.trial_fmt_fun(0))
 
     def build_stack_ax(self, cmap, vmin, vmax):
         self.im = self.stack_ax.imshow(
-            self.stack[self.n_idx, self.z_idx, :, :], cmap=cmap, vmin=vmin, vmax=vmax
+            self.stack[self.n_idx, self.tr_idx, self.z_idx, :, :],
+            cmap=cmap,
+            vmin=vmin,
+            vmax=vmax
         )
         self.roi_rect = Rectangle(
             (self.roi_x - .5, self.roi_y - .5),
@@ -257,7 +305,7 @@ class StackExplorer:
             self.roi_lines[-1].set_linewidth(3)  # avg line thicker
         self.z_marker = self.beam_ax.plot(
             self.zaxis[self.z_idx],
-            beams[self.n_idx, self.z_idx],
+            beams[self.tr_idx, self.z_idx],
             marker="x",
             c="black",
             markersize=12
@@ -268,18 +316,24 @@ class StackExplorer:
     def update_beams(self):
         if self.roi_sz > 1:
             self.beams = np.mean(
-                self.stack[:, :, self.roi_y:self.roi_y + self.roi_sz,
+                self.stack[self.n_idx, :, :, self.roi_y:self.roi_y + self.roi_sz,
                            self.roi_x:self.roi_x + self.roi_sz],
                 axis=(2, 3)
             )
         else:
-            self.beams = self.stack[:, :, self.roi_y, self.roi_x]
+            self.beams = self.stack[self.n_idx, :, :, self.roi_y, self.roi_x]
         return self.beams
 
-    def on_slide(self, v):
+    def on_n_slide(self, v):
         self.n_idx = int(v)
-        self.slide_ax.set_title(
-            self.slide_fmt_fun(self.n_idx) if self.n_idx < self.n_sz - 1 else "average"
+        self.n_slide_ax.set_title(self.n_fmt_fun(self.n_idx))
+        self.update_im()
+        self.update_roi()
+
+    def on_trial_slide(self, v):
+        self.tr_idx = int(v)
+        self.trial_slide_ax.set_title(
+            self.trial_fmt_fun(self.tr_idx) if self.tr_idx < self.tr_sz - 1 else "average"
         )
         self.update_im()
         self.update_roi()
@@ -289,7 +343,9 @@ class StackExplorer:
             self.z_idx = (self.z_idx + self.delta) % self.z_sz
         else:
             self.z_idx = (self.z_idx - self.delta) % self.z_sz
-        self.z_marker.set_data(self.zaxis[self.z_idx], self.beams[self.n_idx, self.z_idx])
+        self.z_marker.set_data(
+            self.zaxis[self.z_idx], self.beams[self.n_idx, self.tr_idx, self.z_idx]
+        )
         self.update_im()
 
     def on_move(self, event):
@@ -312,7 +368,7 @@ class StackExplorer:
             self.update_roi()
 
     def update_im(self):
-        self.im.set_data(self.stack[self.n_idx, self.z_idx, :, :])
+        self.im.set_data(self.stack[self.n_idx, self.tr_idx, self.z_idx, :, :])
         self.stack_ax.set_ylabel("z = %s" % self.z_idx)
         self.im.axes.figure.canvas.draw()
 
@@ -322,16 +378,18 @@ class StackExplorer:
         beams = self.update_beams()
         for i, line in enumerate(self.roi_lines):
             line.set_ydata(beams[i])
-            line.set_color("red" if i == self.n_idx else "black")
-            line.set_alpha(1 if i == self.n_idx else 0.75)
-        self.z_marker.set_data(self.zaxis[self.z_idx], beams[self.n_idx, self.z_idx])
+            line.set_color("red" if i == self.tr_idx else "black")
+            line.set_alpha(1 if i == self.tr_idx else 0.75)
+        self.z_marker.set_data(self.zaxis[self.z_idx], beams[self.tr_idx, self.z_idx])
 
     def connect_events(self):
         self.fig.canvas.mpl_connect("scroll_event", self.on_scroll)
         self.fig.canvas.mpl_connect("motion_notify_event", self.on_move)
         self.fig.canvas.mpl_connect("button_release_event", self.on_im_click)
+        if self.ns:
+            self.n_slider.on_changed(self.on_n_slide)
         if self.trials:
-            self.slider.on_changed(self.on_slide)
+            self.trial_slider.on_changed(self.on_trial_slide)
 
 
 class PeakExplorer:
