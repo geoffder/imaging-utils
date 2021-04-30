@@ -344,7 +344,7 @@ class StackExplorer:
         else:
             self.z_idx = (self.z_idx - self.delta) % self.z_sz
         self.z_marker.set_data(
-            self.zaxis[self.z_idx], self.beams[self.n_idx, self.tr_idx, self.z_idx]
+            self.zaxis[self.z_idx], self.beams[self.tr_idx, self.z_idx]
         )
         self.update_im()
 
@@ -355,7 +355,7 @@ class StackExplorer:
         ):
             x = np.round(event.xdata).astype(np.int)
             y = np.round(event.ydata).astype(np.int)
-            if 0 <= x < self.x_sz and 0 <= y < self.x_sz and (
+            if 0 <= x < self.x_sz and 0 <= y < self.y_sz and (
                 self.roi_x != x or self.roi_y != y
             ):
                 self.roi_x, self.roi_y = x, y
