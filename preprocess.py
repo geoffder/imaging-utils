@@ -130,3 +130,57 @@ def process_folders(base_path, new_base, *funcs, copy_dirs={"noise"}, multi_tria
                     )
 
     loop("")
+
+
+def settings_to_pipeline(settings):
+    multi_trial = settings.pop("multi_trial", False)
+
+    def to_fun(key, arg):
+        if key == "crop":
+            try:
+                x, y = arg.split(",")
+                return lambda a: crop_sides(a, x, y)
+            except:
+                msg = "Expected crop argument to be a comma separated pair of the number"
+                msg += " of x and y pixels to cut from each side. (e.g. crop=48,0)"
+        elif key == "reduce":
+            try:
+                x, y, z = [int(d) for d in arg.split(",")]
+                dims = (x, y, z) if not multi_trial else (1, x, y, z)
+                return lambda a: block_reduce(a, dims, np.mean, 0)
+            except:
+                msg = "Expected a comma separated list of the number of pixels to reduce"
+                msg += " over in each dimension (time, x, y). (e.g. reduce=1,4,4)"
+        elif key == "qi" and multi_trial:
+            try:
+                threshold = float(arg)
+                return lambda a: qi_threshold(a, threshold)
+            except:
+                msg = "Expected a value convertable to float to serve as the quality"
+                msg += " index threshold. (e.g. qi=0.4)"
+        elif key == "qi" and not multi_trial:
+            msg = "The qi option (quality index thresholding) cannot be used unless the"
+            msg += " data to be processed is multiple trials (organized accordingly)."
+            msg += " If it is, ensure that the argument 'multi_trial=1' is given."
+        else:
+            return lambda a: a
+        print(msg)
+
+    return [to_fun(k, v) for k, v in settings.items()]
+
+
+if __name__ == "__main__":
+    settings = {}
+    for arg in sys.argv[1:]:
+        try:
+            k, v = arg.split("=")
+        except:
+            msg = "Invalid argument format. Given %s, but expecting " % arg
+            msg += "a key value pair delimited by '=' (e.g. diam=8). "
+            print(msg)
+        settings[k] = v
+
+    cwd = os.getcwd()
+    parent_path, target_dir = os.path.split(cwd)
+    processed_path = os.path.join(parent_path, "%s_processed" % target_dir)
+    process_folders(cwd, processed_path, *settings_to_pipeline(settings))
