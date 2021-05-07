@@ -114,5 +114,6 @@ extended over time as needed.
   * For example, `snr=50,500,600,1200,2.0`, would calculate snr as the ratio of
   the variance between time points 600:1200 over the variance between 50:500,
   and check if it passed a threshold of 2.0.
+
 **Example usage:**
 `python /path/to/script/preprocess.py multi_trial=1 crop=48,0 reduce=1,4,4 qi=0.4`
