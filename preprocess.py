@@ -134,11 +134,13 @@ def process_folders(base_path, new_base, *funcs, copy_dirs={"noise"}, multi_tria
 
 def settings_to_pipeline(settings):
     multi_trial = settings.pop("multi_trial", False)
+    print("multiple trials: %s" % "yes" if multi_trial else "no")
 
     def to_fun(key, arg):
         if key == "crop":
             try:
-                x, y = arg.split(",")
+                x, y = [int(n_pix) for n_pix in arg.split(",")]
+                print("-> cropping %i x pixels and %i y pixels from each side" % (x, y))
                 return lambda a: crop_sides(a, x, y)
             except:
                 msg = "Expected crop argument to be a comma separated pair of the number"
@@ -147,6 +149,7 @@ def settings_to_pipeline(settings):
             try:
                 x, y, z = [int(d) for d in arg.split(",")]
                 dims = (x, y, z) if not multi_trial else (1, x, y, z)
+                print("-> mean pooling with kernel of shape (%i, %i, %i)" % (x, y, z))
                 return lambda a: block_reduce(a, dims, np.mean, 0)
             except:
                 msg = "Expected a comma separated list of the number of pixels to reduce"
@@ -154,6 +157,10 @@ def settings_to_pipeline(settings):
         elif key == "qi" and multi_trial:
             try:
                 threshold = float(arg)
+                print(
+                    "-> zeroing out pixels that do not reach quality index of %.2f" %
+                    threshold
+                )
                 return lambda a: qi_threshold(a, threshold)
             except:
                 msg = "Expected a value convertable to float to serve as the quality"
@@ -162,6 +169,23 @@ def settings_to_pipeline(settings):
             msg = "The qi option (quality index thresholding) cannot be used unless the"
             msg += " data to be processed is multiple trials (organized accordingly)."
             msg += " If it is, ensure that the argument 'multi_trial=1' is given."
+        elif key == "snr":
+            try:
+                bsln_t0, bsln_t1, resp_t0, resp_t1, treshold = [
+                    int(d) for d in arg.split(",")
+                ]
+                print(
+                    "-> zeroing out pixels that do not reach signal-to-noise threshold of %.2f"
+                    % threshold
+                )
+                return lambda a: snr_threshold(
+                    a, bsln_t0, bsln_t1, resp_t0, resp_t1, threshold
+                )
+            except:
+                msg = "Expected a comma separated list of the frames indices of the start"
+                msg += " and end of the baseline and response windows, followed by the"
+                msg += " signal to noise ratio under which pixels will be zeroed out."
+                msg += " (e.g. snr=50,150,200,1200,2.0)"
         else:
             return lambda a: a
         print(msg)
