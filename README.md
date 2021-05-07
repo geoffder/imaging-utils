@@ -1,6 +1,4 @@
-# imaging-utils
-
-## Suite2p helper scripts
+# Suite2p helper scripts
 The script
 [s2p_runner.py](https://github.com/geoffder/imaging-utils/blob/main/s2p_runner.py)
 is designed to provide a simple way to run the
@@ -11,14 +9,15 @@ geared towards usage on bipolar data, so the configurability is limited at the
 moment for the sake of simplicity. Functionality and configurability will be
 extended over time as needed.
 
-### Setup
+# Setup
 1. Follow suite2p installation instructions found
   [here](https://github.com/MouseLand/suite2p#installation)
 2. While in the suite2p conda environment you created while setting up suite2p,
   ensure the additional libraries required by `s2p_runner.py` are installed,
   like so: `conda install scikit-image pillow`
 
-### Usage ( s2p_runner.py )
+# Usage
+## s2p_runner.py
 * Run the script `s2p_runner.py` from a directory containing tiffs which you
   would like to extract ROIs from, which might look something like this:
   * **Windows:** `C:\path\to\tiffs> python C:\path\to\script\s2p_runner.py`
@@ -36,7 +35,7 @@ extended over time as needed.
   found at the root level as usual.
 * Configuration options are added as additional (optional) arguments with the form
   `arg=val`, like so:
-  * `s2p_runner.py diameter=8 gen_movies=1 gif_timestep=100`
+  * `python /path/to/script/s2p_runner.py diameter=8 gen_movies=1 gif_timestep=100`
 * Currently available options incude all those in the [suite2p opts
   dict](https://github.com/MouseLand/suite2p/blob/main/suite2p/run_s2p.py) by
   the same names as detailed in their
@@ -53,7 +52,7 @@ extended over time as needed.
   this script, as the same code is responsible for exporting the results into
   hdf5 archives after the analysis by suite2p is complete.
 
-### s2p_packer.py
+## s2p_packer.py
 * This script will re-pack an existing **suite2p** folder into and hdf5, and
   generate a denoised gif, placing them in an adjacent directory named `s2p`.
 * Designed to be ran inside of a folder containing a tiff (or tiffs, assuming
@@ -76,3 +75,44 @@ extended over time as needed.
   containing the weighted footprint of a single ROI (X x Y x N matrix)
 * `denoised`: movie constructed using a denoised signal (default: Fcell – Fneu *
   0.7) of each ROI
+
+## preprocess.py
+* This script runs the current folder (including sub-folders) of `tiffs` through a
+  processing pipeline, and saves the output in an adjacent folder (in the parent
+  directory) with the name postpended with `_processed`.
+* The pipeline is described by the arguments given to the script when it is run.
+  With the exception of the `multi_trial` flag, these are translated into
+  functions to be applied to the input imaging data **in order**.
+### Options:
+* `multi_trial`: (0 or 1) indicates that `tiffs` found grouped in a folder represent
+  multiple recordings of the same field responding to the same stimulus. This
+  will be used to adapt the processing functions to the correct shape of the
+  data. The placement of this argument does not matter, first makes the most
+  sense though. Off (0) by default.
+* `crop`: Comma separated pair of integer values indicating the number of pixels
+  to trim from both sides in x, and y.
+  * For example, `crop=48,0`, would result in 48 pixels removed from both sides
+  of the recordings in x and zero pixels in y.
+* `reduce`: Comma separated triplet of integer values indicating the 3d shape
+  (time, x, y) of a kernel with which to apply a strided mean reduction/pooling to
+  the data. Particularly useful for improving signal to noise while reducing the
+  memory required for analysis.
+  * For example, `reduce=1,4,4` will pool over the spatial dimensions with a 4x4
+    kernel, quarering the number of pixels in x and y.
+* `qi`: Float value defining a quality index threshold. A quality index will be
+  calculated for each pixel (beam over time), and any pixels that do not meet
+  the threshold will be zeroed out. As these calculations rely on multi-trial
+  data, this option requires that the `multi_trial=1` option be given (and that
+  data is multi trial, with `tiffs` grouped in subfolders).
+  * For example, `qi=0.4`, would set to zero any pixels that did not meet a quality
+    index of 0.4 over multiple stimulus presentations.
+* `snr`: List of 5 comma delimited values defining the baseline time index window (2
+  integers), the response window (2 integers), and a signal-to-noise ratio
+  threshold. For each pixel, the snr is calculated as the ratio of the variance
+  between the response window indices over the baseline window variance. If the
+  snr does not pass the given threshold, the pixel is zeroed out.
+  * For example, `snr=50,500,600,1200,2.0`, would calculate snr as the ratio of
+  the variance between time points 600:1200 over the variance between 50:500,
+  and check if it passed a threshold of 2.0.
+**Example usage:**
+`python /path/to/script/preprocess.py multi_trial=1 crop=48,0 reduce=1,4,4 qi=0.4`
