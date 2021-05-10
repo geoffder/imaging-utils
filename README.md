@@ -52,6 +52,8 @@ extended over time as needed.
   this script, as the same code is responsible for exporting the results into
   hdf5 archives after the analysis by suite2p is complete.
 
+---
+
 ## s2p_packer.py
 * This script will re-pack an existing **suite2p** folder into and hdf5, and
   generate a denoised gif, placing them in an adjacent directory named `s2p`.
@@ -75,6 +77,8 @@ extended over time as needed.
   containing the weighted footprint of a single ROI (X x Y x N matrix)
 * `denoised`: movie constructed using a denoised signal (default: Fcell – Fneu *
   0.7) of each ROI
+
+---
 
 ## preprocess.py
 * This script runs the current folder (including sub-folders) of `tiffs` through a
@@ -116,4 +120,6 @@ extended over time as needed.
   and check if it passed a threshold of 2.0.
 
 **Example usage:**
-`python /path/to/script/preprocess.py multi_trial=1 crop=48,0 reduce=1,4,4 qi=0.4`
+``` sh
+python /path/to/script/preprocess.py multi_trial=1 crop=48,0 reduce=1,4,4 qi=0.4
+```
