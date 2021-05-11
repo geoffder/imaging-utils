@@ -677,7 +677,7 @@ def avg_trigger_window(
     for t, w in zip(post_shift, weights):
         window += lead_window(stim_t, stim, t, duration) * w
 
-    return window, times
+    return window, times[legal]
 
 
 def trigger_xaxis(stim_t, lead_time, post_time):
