@@ -640,7 +640,8 @@ def avg_trigger_window(
     stim,
     rec_t,
     rec,
-    duration,
+    lead_time,
+    post_time,
     trigger_idxs,
     prominences=None,
     max_prominence=None,
@@ -649,27 +650,41 @@ def avg_trigger_window(
     end_time=None,
 ):
     """Rough implementation of threshold triggered averaging of a stimulus."""
+    duration = lead_time + post_time
+    n_frames = nearest_index(stim_t, np.min(stim_t) + duration)
     times = rec_t[trigger_idxs]
+    post_shift = times + post_time
     start_time = np.min(stim_t) if start_time is None else start_time
     end_time = np.max(stim_t) if end_time is None else end_time
-    legal = (times - duration > start_time) * (times <= end_time)
-    times = times[legal]
-    leads = [lead_window(stim_t, stim, t, duration) for t in times]
+    legal = (post_shift - duration > start_time) * (post_shift <= end_time)
+    post_shift = post_shift[legal]
 
     if prominences is None:
-        window = np.mean(leads, axis=0)
+        weights = np.ones(len(times)) / len(times)
     else:
         if max_prominence is not None:
-            proms = np.clip(prominences[legal], 0, max_prominence)
+            weights = np.clip(prominences[legal], 0, max_prominence)
         else:
-            proms = prominences[legal]
+            weights = prominences[legal]
 
         if nonlinear_weighting:
-            window = np.sum(leads * soft_max(proms.reshape(-1, 1, 1, 1)), axis=0)
+            weights = soft_max(weights)
         else:
-            window = np.sum(leads * (proms / np.sum(proms)).reshape(-1, 1, 1, 1), axis=0)
+            weights = weights / np.sum(weights)
+
+    window = np.zeros((n_frames, stim.shape[1], stim.shape[2]))
+
+    for t, w in zip(post_shift, weights):
+        window += lead_window(stim_t, stim, t, duration) * w
 
     return window, times
+
+
+def trigger_xaxis(stim_t, lead_time, post_time):
+    duration = lead_time + post_time
+    stim_dt = (np.max(stim_t) - np.min(stim_t)) / (len(stim_t - 1))
+    n_frames = nearest_index(stim_t, np.min(stim_t) + duration)
+    return np.arange(n_frames) * stim_dt - lead_time
 
 
 def butter_bandpass(lowcut, highcut, sample_rate, order=5):
