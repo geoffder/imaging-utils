@@ -202,10 +202,10 @@ class StackExplorer:
             else:
                 self.ns, self.trials = False, False
 
-            if self.trials:
-                if stack.ndim < 5:
-                    stack = stack.reshape(1, *stack.shape)
+            if stack.ndim < 5:
+                stack = stack.reshape(1, *stack.shape)
 
+            if self.trials:
                 self.avg = np.mean(stack, axis=1, keepdims=True)
                 stack = np.concatenate([stack, self.avg], axis=1)
                 self.trials = True
@@ -233,6 +233,11 @@ class StackExplorer:
                 self.trial_fmt_fun = (
                     lambda i: "trial %i" % i
                 ) if trial_fmt_fun is None else trial_fmt_fun
+            else:
+                if "gridspec_kw" not in plot_kwargs:
+                    plot_kwargs["gridspec_kw"] = {"height_ratios": [.7, .3]}
+                self.fig, self.ax = plt.subplots(2, **plot_kwargs)
+                self.stack_ax, self.beam_ax = self.ax
         else:
             self.ns, self.trials = False, False
             stack = stack.reshape(1, 1, *stack.shape)
@@ -241,11 +246,14 @@ class StackExplorer:
             self.fig, self.ax = plt.subplots(2, **plot_kwargs)
             self.stack_ax, self.beam_ax = self.ax
 
-        self.stack, self.delta, self.roi_sz = stack, delta, roi_sz
+        self.stack, self.delta = stack, delta
         self.n_sz, self.tr_sz, self.z_sz, self.y_sz, self.x_sz = stack.shape
         self.n_idx, self.tr_idx, self.z_idx, self.roi_x, self.roi_y = 0, 0, 0, 0, 0
         self.zaxis = np.arange(self.z_sz) if zaxis is None else zaxis
         self.roi_locked = False
+
+        self.roi_x_sz, self.roi_y_sz = roi_sz if type(roi_sz
+                                                     ) == tuple else (roi_sz, roi_sz)
 
         self.build_stack_ax(cmap, vmin, vmax)
         self.build_roi_ax(vmin, vmax)
@@ -289,8 +297,8 @@ class StackExplorer:
         )
         self.roi_rect = Rectangle(
             (self.roi_x - .5, self.roi_y - .5),
-            self.roi_sz,
-            self.roi_sz,
+            self.roi_x_sz,
+            self.roi_y_sz,
             fill=False,
             color="red",
             linewidth=2,
@@ -314,14 +322,11 @@ class StackExplorer:
         self.update_roi()
 
     def update_beams(self):
-        if self.roi_sz > 1:
-            self.beams = np.mean(
-                self.stack[self.n_idx, :, :, self.roi_y:self.roi_y + self.roi_sz,
-                           self.roi_x:self.roi_x + self.roi_sz],
-                axis=(2, 3)
-            )
-        else:
-            self.beams = self.stack[self.n_idx, :, :, self.roi_y, self.roi_x]
+        self.beams = np.mean(
+            self.stack[self.n_idx, :, :, self.roi_y:self.roi_y + self.roi_y_sz,
+                       self.roi_x:self.roi_x + self.roi_x_sz],
+            axis=(2, 3)
+        )
         return self.beams
 
     def on_n_slide(self, v):
