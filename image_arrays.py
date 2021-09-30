@@ -8,6 +8,7 @@ from skimage import io
 from scipy import signal
 from PIL import Image
 from tifffile import imsave
+
 """
 NOTE: Discoveries in working with suite2p again.
 - Can provide data as h5 archives with a stack stored under the key "data"
@@ -20,6 +21,7 @@ class StackPlotter:
     mouse scroll wheel. Takes the pyplot axis object and data as the first two
     arguments. Additionally, use delta to set the number of frames each step of
     the wheel skips through."""
+
     def __init__(self, fig, ax, stack, delta=10, vmin=None, vmax=None, cmap="gray"):
         self.fig = fig
         self.ax = ax
@@ -49,6 +51,7 @@ class StackPlotter:
 
 class MultiStackPlotter:
     """Stacks must all have the same z size, but other dims can be different."""
+
     def __init__(
         self,
         stacks,
@@ -61,7 +64,11 @@ class MultiStackPlotter:
         idx_fmt_fun=lambda i: "z = %i" % i,
         **plot_kwargs
     ):
-        self.stacks, self.n_stacks, self.slices = stacks, len(stacks), stacks[0].shape[0]
+        self.stacks, self.n_stacks, self.slices = (
+            stacks,
+            len(stacks),
+            stacks[0].shape[0],
+        )
         self.delta, self.n_cols = delta, n_cols
         self.idx_fmt_fun = idx_fmt_fun
         self.n_rows = np.ceil(self.n_stacks / self.n_cols).astype(np.int)
@@ -154,7 +161,9 @@ class MultiWavePlotter:
                         else:
                             self.lines[i].append(a.plot(xaxis, w)[0])
                     a.set_title(title_fmt_fun(i))
-                    a.set_ylim(ymin.get(i, ymin["default"]), ymax.get(i, ymax["default"]))
+                    a.set_ylim(
+                        ymin.get(i, ymin["default"]), ymax.get(i, ymax["default"])
+                    )
                 else:
                     a.set_visible(False)
                 i += 1
@@ -214,35 +223,46 @@ class StackExplorer:
                 if "gridspec_kw" not in plot_kwargs:
                     if self.ns and self.trials:
                         plot_kwargs["gridspec_kw"] = {
-                            "height_ratios": [.64, .03, .03, .3]
+                            "height_ratios": [0.64, 0.03, 0.03, 0.3]
                         }
                     else:
-                        plot_kwargs["gridspec_kw"] = {"height_ratios": [.67, .03, .3]}
-                self.fig, self.ax = plt.subplots(2 + self.ns + self.trials, **plot_kwargs)
+                        plot_kwargs["gridspec_kw"] = {
+                            "height_ratios": [0.67, 0.03, 0.3]
+                        }
+                self.fig, self.ax = plt.subplots(
+                    2 + self.ns + self.trials, **plot_kwargs
+                )
 
                 if self.ns and self.trials:
-                    self.stack_ax, self.n_slide_ax, self.trial_slide_ax, self.beam_ax = self.ax
+                    (
+                        self.stack_ax,
+                        self.n_slide_ax,
+                        self.trial_slide_ax,
+                        self.beam_ax,
+                    ) = self.ax
                 elif self.ns:
                     self.stack_ax, self.n_slide_ax, self.beam_ax = self.ax
                 else:
                     self.stack_ax, self.trial_slide_ax, self.beam_ax = self.ax
 
                 self.n_fmt_fun = (
-                    lambda i: "N %i" % i
-                ) if n_fmt_fun is None else n_fmt_fun
+                    (lambda i: "N %i" % i) if n_fmt_fun is None else n_fmt_fun
+                )
                 self.trial_fmt_fun = (
-                    lambda i: "trial %i" % i
-                ) if trial_fmt_fun is None else trial_fmt_fun
+                    (lambda i: "trial %i" % i)
+                    if trial_fmt_fun is None
+                    else trial_fmt_fun
+                )
             else:
                 if "gridspec_kw" not in plot_kwargs:
-                    plot_kwargs["gridspec_kw"] = {"height_ratios": [.7, .3]}
+                    plot_kwargs["gridspec_kw"] = {"height_ratios": [0.7, 0.3]}
                 self.fig, self.ax = plt.subplots(2, **plot_kwargs)
                 self.stack_ax, self.beam_ax = self.ax
         else:
             self.ns, self.trials = False, False
             stack = stack.reshape(1, 1, *stack.shape)
             if "gridspec_kw" not in plot_kwargs:
-                plot_kwargs["gridspec_kw"] = {"height_ratios": [.7, .3]}
+                plot_kwargs["gridspec_kw"] = {"height_ratios": [0.7, 0.3]}
             self.fig, self.ax = plt.subplots(2, **plot_kwargs)
             self.stack_ax, self.beam_ax = self.ax
 
@@ -252,8 +272,9 @@ class StackExplorer:
         self.zaxis = np.arange(self.z_sz) if zaxis is None else zaxis
         self.roi_locked = False
 
-        self.roi_x_sz, self.roi_y_sz = roi_sz if type(roi_sz
-                                                     ) == tuple else (roi_sz, roi_sz)
+        self.roi_x_sz, self.roi_y_sz = (
+            roi_sz if type(roi_sz) == tuple else (roi_sz, roi_sz)
+        )
 
         self.build_stack_ax(cmap, vmin, vmax)
         self.build_roi_ax(vmin, vmax)
@@ -272,7 +293,7 @@ class StackExplorer:
             valmax=(self.n_sz - 1),
             valinit=0,
             valstep=1,
-            valfmt="%.0f"
+            valfmt="%.0f",
         )
         self.n_slide_ax.set_title(self.n_fmt_fun(0))
 
@@ -284,7 +305,7 @@ class StackExplorer:
             valmax=(self.tr_sz - 1),
             valinit=0,
             valstep=1,
-            valfmt="%.0f"
+            valfmt="%.0f",
         )
         self.trial_slide_ax.set_title(self.trial_fmt_fun(0))
 
@@ -293,10 +314,10 @@ class StackExplorer:
             self.stack[self.n_idx, self.tr_idx, self.z_idx, :, :],
             cmap=cmap,
             vmin=vmin,
-            vmax=vmax
+            vmax=vmax,
         )
         self.roi_rect = Rectangle(
-            (self.roi_x - .5, self.roi_y - .5),
+            (self.roi_x - 0.5, self.roi_y - 0.5),
             self.roi_x_sz,
             self.roi_y_sz,
             fill=False,
@@ -316,16 +337,21 @@ class StackExplorer:
             beams[self.tr_idx, self.z_idx],
             marker="x",
             c="black",
-            markersize=12
+            markersize=12,
         )[0]
         self.beam_ax.set_ylim(vmin, vmax)
         self.update_roi()
 
     def update_beams(self):
         self.beams = np.mean(
-            self.stack[self.n_idx, :, :, self.roi_y:self.roi_y + self.roi_y_sz,
-                       self.roi_x:self.roi_x + self.roi_x_sz],
-            axis=(2, 3)
+            self.stack[
+                self.n_idx,
+                :,
+                :,
+                self.roi_y : self.roi_y + self.roi_y_sz,
+                self.roi_x : self.roi_x + self.roi_x_sz,
+            ],
+            axis=(2, 3),
         )
         return self.beams
 
@@ -338,7 +364,9 @@ class StackExplorer:
     def on_trial_slide(self, v):
         self.tr_idx = int(v)
         self.trial_slide_ax.set_title(
-            self.trial_fmt_fun(self.tr_idx) if self.tr_idx < self.tr_sz - 1 else "average"
+            self.trial_fmt_fun(self.tr_idx)
+            if self.tr_idx < self.tr_sz - 1
+            else "average"
         )
         self.update_im()
         self.update_roi()
@@ -355,20 +383,23 @@ class StackExplorer:
 
     def on_move(self, event):
         if (
-            not self.roi_locked and event.inaxes == self.stack_ax and
-            not (event.xdata is None or event.ydata is None)
+            not self.roi_locked
+            and event.inaxes == self.stack_ax
+            and not (event.xdata is None or event.ydata is None)
         ):
             x = np.round(event.xdata).astype(np.int)
             y = np.round(event.ydata).astype(np.int)
-            if 0 <= x < self.x_sz and 0 <= y < self.y_sz and (
-                self.roi_x != x or self.roi_y != y
+            if (
+                0 <= x < self.x_sz
+                and 0 <= y < self.y_sz
+                and (self.roi_x != x or self.roi_y != y)
             ):
                 self.roi_x, self.roi_y = x, y
-                self.roi_rect.set_xy((self.roi_x - .5, self.roi_y - .5))
+                self.roi_rect.set_xy((self.roi_x - 0.5, self.roi_y - 0.5))
                 self.update_roi()
 
     def on_im_click(self, event):
-        if (event.button == 1 and event.inaxes == self.stack_ax):
+        if event.button == 1 and event.inaxes == self.stack_ax:
             self.roi_locked = False if self.roi_locked else True
             self.update_roi()
 
@@ -404,9 +435,9 @@ class PeakExplorer:
         recs,
         prominence=1,
         width=2,
-        tolerance=.5,
+        tolerance=0.5,
         distance=1,
-        title_fmt_fun=lambda i: "roi = %i" % i
+        title_fmt_fun=lambda i: "roi = %i" % i,
     ):
         self.xaxis, self.recs = xaxis, recs
         self.n_rois, self.pts = recs.shape
@@ -427,7 +458,7 @@ class PeakExplorer:
 
     def build_fig(self):
         self.fig = plt.figure(constrained_layout=True, figsize=(6, 6))
-        gs = self.fig.add_gridspec(nrows=3, ncols=2, height_ratios=[.8, .1, .1])
+        gs = self.fig.add_gridspec(nrows=3, ncols=2, height_ratios=[0.8, 0.1, 0.1])
         self.rec_ax = self.fig.add_subplot(gs[0, :])
         self.prom_ax = self.fig.add_subplot(gs[1, 0])
         self.width_ax = self.fig.add_subplot(gs[1, 1])
@@ -488,7 +519,7 @@ class PeakExplorer:
             prominence=self.prominence,
             rel_height=self.tolerance,
             width=self.width,
-            distance=self.distance
+            distance=self.distance,
         )
 
     def update_view(self):
@@ -537,7 +568,7 @@ def save_frames(fpath, ext, frames, timestep=40):
         duration=timestep,
         loop=0,
         optimize=False,
-        pallete='I'
+        pallete="I",
     )
 
 
@@ -710,7 +741,7 @@ def reduce_chunks(arr, chunk_size, reducer=np.sum, axis=-1):
     og_shape = arr.shape
     if axis < 0:
         axis += arr.ndim
-    new_shape = og_shape[:axis] + (-1, chunk_size) + og_shape[axis + 1:]
+    new_shape = og_shape[:axis] + (-1, chunk_size) + og_shape[axis + 1 :]
     arr = arr.reshape(new_shape)
     return reducer(arr, axis=(axis + 1))
 
@@ -742,3 +773,13 @@ def quality_index(arr):
     measuring how much of the variance in each trial explained by signals
     present across all trials."""
     return np.var(np.mean(arr, axis=0)) / np.mean(np.var(arr, axis=1))
+
+
+def load_gif(pth):
+    """Load in multiframe gif into numpy array."""
+    img = Image.open(pth)
+    stack = []
+    for i in range(img.n_frames):
+        img.seek(i)
+        stack.append(np.array(img))
+    return np.stack(stack, axis=0)
