@@ -22,7 +22,7 @@ def save_frames(fpath, ext, frames, timestep=40):
         duration=timestep,
         loop=0,
         optimize=False,
-        pallete='I'
+        pallete="I",
     )
 
 
@@ -52,14 +52,14 @@ def get_suite2p_data(pth, exclude_non_cells=False):
     recs & recs_neu: (N, T) ndarray
     stats: Numpy object containing of dicts for all N cells.
     """
-    recs = np.load(os.path.join(pth, 'F.npy'))
-    neu = np.load(os.path.join(pth, 'Fneu.npy'))
-    stats = np.load(os.path.join(pth, 'stat.npy'), allow_pickle=True)
+    recs = np.load(os.path.join(pth, "F.npy"))
+    neu = np.load(os.path.join(pth, "Fneu.npy"))
+    stats = np.load(os.path.join(pth, "stat.npy"), allow_pickle=True)
 
     # narrow down selection to those ROIs determined to be "cells" by suite2p
     if exclude_non_cells:
         cell_ids = np.nonzero(
-            np.load(os.path.join(pth, 'iscell.npy'))[:, 0].astype(np.int)
+            np.load(os.path.join(pth, "iscell.npy"))[:, 0].astype(np.int)
         )[0]
         recs = recs[cell_ids, :]
         neu = neu[cell_ids, :]
@@ -74,7 +74,7 @@ def create_masks(stats, dims):
     """
     masks = np.zeros((stats.size, *dims))
     for idx in range(stats.size):
-        masks[idx, stats[idx]['ypix'], stats[idx]['xpix']] = stats[idx]["lam"]
+        masks[idx, stats[idx]["ypix"], stats[idx]["xpix"]] = stats[idx]["lam"]
     return masks
 
 
@@ -87,14 +87,16 @@ def roi_movie(beams, stats, dims):
     """
     arr = np.zeros(dims)
     for i in range(beams.shape[0]):
-        arr[:, stats[i]["ypix"],
-            stats[i]["xpix"]] += (stats[i]["lam"] * beams[i].reshape(-1, 1))
+        arr[:, stats[i]["ypix"], stats[i]["xpix"]] += stats[i]["lam"] * beams[
+            i
+        ].reshape(-1, 1)
     return arr
 
 
 def pack_hdf(pth, data_dict, compression="gzip"):
     """Takes data organized in a python dict, and creates an hdf5 with the
     same structure."""
+
     def rec(data, grp):
         for k, v in data.items():
             if type(v) is dict:
@@ -128,11 +130,7 @@ def pack_suite2p(
 
     # x and y pix are swapped to coincide with IgorPro conventions
     pixels = {
-        str(i): {
-            "y": n["xpix"],
-            "x": n["ypix"],
-            "weights": n["lam"]
-        }
+        str(i): {"y": n["xpix"], "x": n["ypix"], "weights": n["lam"]}
         for i, n in enumerate(stats)
     }
 
@@ -182,8 +180,11 @@ if __name__ == "__main__":
     ]
     stacks = [io.imread(os.path.join(base_path, f)) for f in names]
 
-    trial_pts = {re.sub("\.tif?[f]", "", f): s.shape[0]
-                 for f, s in zip(names, stacks)} if len(names) > 0 else None
+    trial_pts = (
+        {re.sub("\.tif?[f]", "", f): s.shape[0] for f, s in zip(names, stacks)}
+        if len(names) > 0
+        else None
+    )
 
     space_dims = stacks[0].shape[1:]
     out_path = os.path.join(base_path, "s2p")
@@ -199,5 +200,5 @@ if __name__ == "__main__":
         trial_pts=trial_pts,
         gif_timestep=int(settings.get("gif_timestep", 200)),
         exclude_non_cells=int(settings.get("only_cells", 0)),
-        denoised_movies=bool(int(settings.get("gen_movies", 0)))
+        denoised_movies=bool(int(settings.get("gen_movies", 0))),
     )
