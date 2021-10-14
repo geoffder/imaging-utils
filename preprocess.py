@@ -12,7 +12,7 @@ from image_arrays import *
 
 
 def is_tiff(name):
-    return (name.endswith(".tiff") or name.endswith(".tif"))
+    return name.endswith(".tiff") or name.endswith(".tif")
 
 
 def compose(f, g):
@@ -22,7 +22,8 @@ def compose(f, g):
 def prepare_full_path(load_path, label, out_path=None):
     load_folder, name = os.path.split(load_path)
     n, ext = os.path.splitext(name)
-    new_name = "%s_%s%s" % (n, label, ext)
+    label = "_%s" % label if label != "" else label
+    new_name = "%s%s%s" % (n, label, ext)
     if out_path is None:
         return os.path.join(load_folder, new_name)
     else:
@@ -62,7 +63,7 @@ def multi_trial_tiff_pipeline(pth, label, *funcs, out_pth=None):
 def block_reduce_tiff(pth, reducer, block_size=(1, 2, 2), pad_val=0, **reducer_kwargs):
     """Load a tiff from file, process it with block_reduce and save the result."""
     f = lambda a: block_reduce(a, block_size, reducer, pad_val, reducer_kwargs)
-    label = "pooled_%i" % "_".join(map(str, block_size))
+    label = "pooled_%s" % "_".join(map(str, block_size))
     map_tiff(f, pth, label)
 
 
@@ -70,21 +71,24 @@ def crop_sides(arr, x_edge, y_edge):
     y_size = arr.shape[-2]
     x_size = arr.shape[-1]
     if arr.ndim > 3:
-        return arr[:, :, y_edge:(y_size - y_edge), x_edge:(x_size - x_edge)]
+        return arr[:, :, y_edge : (y_size - y_edge), x_edge : (x_size - x_edge)]
     else:
-        return arr[:, y_edge:(y_size - y_edge), x_edge:(x_size - x_edge)]
+        return arr[:, y_edge : (y_size - y_edge), x_edge : (x_size - x_edge)]
 
 
 def qi_threshold(arr, thresh, mask_val=0):
     """Replace pixels/beams that do not pass the target signal-to-noise ratio."""
     n_trials, t, x, y = arr.shape
-    mask = np.stack(
-        [
-            quality_index(beams)
-            for beams in arr.reshape(n_trials, t, -1).transpose(2, 0, 1)
-        ],
-        axis=0
-    ).reshape(x, y) > thresh
+    mask = (
+        np.stack(
+            [
+                quality_index(beams)
+                for beams in arr.reshape(n_trials, t, -1).transpose(2, 0, 1)
+            ],
+            axis=0,
+        ).reshape(x, y)
+        > thresh
+    )
     arr[:, :, mask] = mask_val
     return arr
 
@@ -143,7 +147,9 @@ def settings_to_pipeline(settings):
                 print("-> cropping %i x pixels and %i y pixels from each side" % (x, y))
                 return lambda a: crop_sides(a, x, y)
             except:
-                msg = "Expected crop argument to be a comma separated pair of the number"
+                msg = (
+                    "Expected crop argument to be a comma separated pair of the number"
+                )
                 msg += " of x and y pixels to cut from each side. (e.g. crop=48,0)"
         elif key == "reduce":
             try:
@@ -152,14 +158,16 @@ def settings_to_pipeline(settings):
                 print("-> mean pooling with kernel of shape (%i, %i, %i)" % (x, y, z))
                 return lambda a: block_reduce(a, dims, np.mean, 0)
             except:
-                msg = "Expected a comma separated list of the number of pixels to reduce"
+                msg = (
+                    "Expected a comma separated list of the number of pixels to reduce"
+                )
                 msg += " over in each dimension (time, x, y). (e.g. reduce=1,4,4)"
         elif key == "qi" and multi_trial:
             try:
                 threshold = float(arg)
                 print(
-                    "-> zeroing out pixels that do not reach quality index of %.2f" %
-                    threshold
+                    "-> zeroing out pixels that do not reach quality index of %.2f"
+                    % threshold
                 )
                 return lambda a: qi_threshold(a, threshold)
             except:
@@ -182,7 +190,9 @@ def settings_to_pipeline(settings):
                     a, bsln_t0, bsln_t1, resp_t0, resp_t1, threshold
                 )
             except:
-                msg = "Expected a comma separated list of the frames indices of the start"
+                msg = (
+                    "Expected a comma separated list of the frames indices of the start"
+                )
                 msg += " and end of the baseline and response windows, followed by the"
                 msg += " signal to noise ratio under which pixels will be zeroed out."
                 msg += " (e.g. snr=50,150,200,1200,2.0)"
