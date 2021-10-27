@@ -6,12 +6,21 @@ import re
 import h5py as h5
 import numpy as np
 from skimage import io
-from PIL import Image
+from PIL import Image, ImagePalette
+
+
+# def normalize_uint8(arr, max_val=None):
+#     max_val = arr.max() if max_val is None else max_val
+#     return (arr / max_val * 255).clip(0, 255).astype(np.uint8)
 
 
 def normalize_uint8(arr, max_val=None):
-    max_val = arr.max() if max_val is None else max_val
-    return (arr / max_val * 255).clip(0, 255).astype(np.uint8)
+    arr -= np.min(arr)
+    arr /= np.max(arr)
+    return (arr * 255).astype(np.uint8)
+    # return arr * 255
+    # return (arr * 127).astype(np.uint8)
+    # return arr
 
 
 def save_frames(fpath, ext, frames, timestep=40):
@@ -22,7 +31,9 @@ def save_frames(fpath, ext, frames, timestep=40):
         duration=timestep,
         loop=0,
         optimize=False,
-        pallete="I",
+        mode="L",
+        palette="L",
+        # palette=ImagePalette.ImagePalette(mode="L"),
     )
 
 
@@ -35,10 +46,22 @@ def array_to_gif(pth, fname, arr, max_val=None, downsample=1, time_ax=0, timeste
         arr = np.moveaxis(arr, time_ax, 0)
 
     arr = normalize_uint8(arr)
-    frames = [
-        Image.fromarray(arr[i * downsample], mode="P")
-        for i in range(int(arr.shape[0] / downsample))
-    ]
+    frames = []
+    for i in range(int(arr.shape[0] / downsample)):
+        img = Image.fromarray(arr[i * downsample], mode="P")
+        # img.putpalette(b"L")
+        # img = img.convert("L")
+        frames.append(img)
+
+    # frames = [
+    #     Image.fromarray(arr[i * downsample], mode="L").putpalette(
+    #         ImagePalette.ImagePalette(mode="L")
+    #     )
+    #     # Image.fromarray(arr[i * downsample]).convert("L")
+    #     # Image.fromarray(arr[i * downsample], mode="L")
+    #     # Image.fromarray(arr[i * downsample])
+    #     for i in range(int(arr.shape[0] / downsample))
+    # ]
 
     os.makedirs(pth, exist_ok=True)
     save_frames(os.path.join(pth, fname), "gif", frames, timestep=timestep)
@@ -141,12 +164,17 @@ def pack_suite2p(
     data = {
         "pixels": pixels,
         "masks": masks.transpose(2, 1, 0),  # N to last dim, swap X and Y
+        "space_dims": np.array(space_dims),
     }
 
     if denoised_movies:
         denoised = roi_movie(recs - neu * 0.7, stats, (n_pts, *space_dims))
         data["denoised"] = denoised.transpose(2, 1, 0)  # time to last dim, swap X and Y
         array_to_gif(out_path, out_name + "_denoised", denoised, timestep=gif_timestep)
+        # from tifffile import imsave
+        # from image_arrays import array_to_tiff
+
+        # array_to_tiff(out_path, out_name + "_denoised", denoised)
         del denoised
 
     if trial_pts is None:
