@@ -9,6 +9,8 @@ from scipy import signal
 from PIL import Image
 from tifffile import imsave
 
+from s2p_packer import roi_movie, unpack_hdf
+
 """
 NOTE: Discoveries in working with suite2p again.
 - Can provide data as h5 archives with a stack stored under the key "data"
@@ -581,9 +583,13 @@ def normalize_uint8(arr, max_val=None):
     return (arr / max_val * 255).clip(0, 255).astype(np.uint8)
 
 
+# def normalize_uint16(arr, max_val=None):
+#     max_val = arr.max() if max_val is None else max_val
+#     return (arr / max_val * 65535).clip(0, 65535).astype(np.uint16)
 def normalize_uint16(arr, max_val=None):
-    max_val = arr.max() if max_val is None else max_val
-    return (arr / max_val * 65535).clip(0, 65535).astype(np.uint16)
+    arr -= np.min(arr)
+    arr /= np.max(arr)
+    return (arr * 65535).astype(np.uint16)
 
 
 def array_to_gif(pth, fname, arr, max_val=None, downsample=1, time_ax=0, timestep=40):
@@ -783,3 +789,46 @@ def load_gif(pth):
         img.seek(i)
         stack.append(np.array(img))
     return np.stack(stack, axis=0)
+
+
+def save_tiff(pth, name, tiff):
+    os.makedirs(pth, exist_ok=True)
+    imsave(os.path.join(pth, name), tiff)
+
+
+def pixels_to_s2p_stats(pixels):
+    return {
+        int(i): {"xpix": px["x"], "ypix": px["y"], "lam": px["weights"]}
+        for i, px in pixels.items()
+    }
+
+
+def pixels_to_beams(rec, pixels, use_weights=True):
+    if use_weights:
+        roi_sum = lambda frame, xs, ys, ws: (
+            np.sum([frame[x, y] * w for x, y, w in zip(xs, ys, ws)])
+        )
+    else:
+        roi_sum = lambda frame, xs, ys, _: (
+            np.mean([frame[x, y] for x, y, w in zip(xs, ys)])
+        )
+
+    return np.array(
+        [
+            [roi_sum(fr, px["x"], px["y"], px["weights"]) for fr in rec]
+            for px in pixels.values()
+        ]
+    )
+
+
+def beams_to_movie(beams, pixels, space_dims):
+    return roi_movie(beams, pixels_to_s2p_stats(pixels), (beams.shape[1], *space_dims))
+
+
+def s2p_hdf_to_roi_movie(pth):
+    with h5.File(pth, "r") as f:
+        data = unpack_hdf(f)
+
+    return beams_to_movie(
+        data["recs"] - data["Fneu"] * 0.7, data["pixels"], data["space_dims"]
+    )
