@@ -8,6 +8,7 @@ from skimage import io
 from scipy import signal
 from PIL import Image
 from tifffile import imsave
+import cv2
 
 from s2p_packer import roi_movie, unpack_hdf
 
@@ -832,3 +833,34 @@ def s2p_hdf_to_roi_movie(pth):
     return beams_to_movie(
         data["recs"] - data["Fneu"] * 0.7, data["pixels"], data["space_dims"]
     )
+
+
+def upscale(arr, factor, axes=[0, 1]):
+    return arr.repeat(factor, axis=axes[0]).repeat(factor, axis=axes[1])
+
+
+def array_to_mp4(arr, path, fps=60, scale=5):
+    arr = upscale(normalize_uint8(arr), scale, axes=[1, 2])
+    fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+    video = cv2.VideoWriter(path, fourcc, fps, arr.shape[1:])
+    for frame in arr:
+        img = np.tile(frame.reshape(*frame.shape, 1), (1, 1, 3))
+        video.write(img)
+
+    video.release()
+
+
+def moving_average(arr, n=3, axis=0):
+    """No padding moving average."""
+    arr = np.moveaxis(arr, axis, 0) if axis != 0 else arr
+    arr = np.cumsum(arr, axis=0)
+    arr[n:] = arr[n:] - arr[:-n]
+    arr = arr[n - 1 :] / n
+    return np.moveaxis(arr, 0, axis) if axis != 0 else arr
+
+
+def rolling_average(arr, n=3, axis=0):
+    """Same as moving average, but with convolve and same padding."""
+    arr = np.moveaxis(arr, axis, 0) if axis != 0 else arr
+    arr = np.stack([np.convolve(a, np.ones(n), "same") for a in arr], axis=axis)
+    return arr / n
