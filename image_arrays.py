@@ -810,7 +810,7 @@ def pixels_to_beams(rec, pixels, use_weights=True):
         )
     else:
         roi_sum = lambda frame, xs, ys, _: (
-            np.mean([frame[x, y] for x, y, w in zip(xs, ys)])
+            np.sum([frame[x, y] for x, y in zip(xs, ys)])
         )
 
     return np.array(
