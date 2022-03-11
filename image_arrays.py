@@ -8,7 +8,6 @@ from skimage import io
 from scipy import signal
 from PIL import Image
 from tifffile import imsave
-import cv2
 
 from s2p_packer import roi_movie, unpack_hdf
 
@@ -839,15 +838,23 @@ def upscale(arr, factor, axes=[0, 1]):
     return arr.repeat(factor, axis=axes[0]).repeat(factor, axis=axes[1])
 
 
-def array_to_mp4(arr, path, fps=60, scale=5):
-    arr = upscale(normalize_uint8(arr), scale, axes=[1, 2])
-    fourcc = cv2.VideoWriter_fourcc(*"mp4v")
-    video = cv2.VideoWriter(path, fourcc, fps, arr.shape[1:])
-    for frame in arr:
-        img = np.tile(frame.reshape(*frame.shape, 1), (1, 1, 3))
-        video.write(img)
+def map_axis(f, arr, axis=-1):
+    """Map the specified axis (defaults to -1) with the function `f`. `f` should
+     thus expect an ndarray with the shape created by `axis` and all of its
+     'sub-axes'. The shape returned by `f` may differ from the original shape of
+    its input.
 
-    video.release()
+    For example:
+    - `arr` of shape (2, 5) with `axis` = -1. f operates on a 1d array of length 5.
+    - `arr` of shape (2, 5, 5) with `axis` = 1. f operates on an array of shape (5, 5).
+    """
+    in_shape = arr.shape
+    reshaped = arr.reshape(np.prod(in_shape[:axis]), *in_shape[axis:])
+    mapped = np.stack([f(a) for a in reshaped])
+    if len(mapped.shape) == 1:
+        return mapped.reshape(in_shape[:axis])
+    else:
+        return mapped.reshape(*in_shape[:axis], *mapped.shape[axis:])
 
 
 def moving_average(arr, n=3, axis=0):
