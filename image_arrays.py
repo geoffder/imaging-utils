@@ -1,9 +1,11 @@
+from typing import Any, Callable, Tuple, List
 import os
 import h5py as h5
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle
 from matplotlib.widgets import TextBox, Slider
+
 from skimage import io
 from scipy import signal
 from PIL import Image
@@ -27,7 +29,7 @@ class StackPlotter:
     def __init__(self, fig, ax, stack, delta=10, vmin=None, vmax=None, cmap="gray"):
         self.fig = fig
         self.ax = ax
-        self.stack = stack
+        self.stack: np.ndarray = stack
         self.slices = stack.shape[0]
         self.idx = 0
         self.delta = delta
@@ -56,7 +58,7 @@ class MultiStackPlotter:
 
     def __init__(
         self,
-        stacks,
+        stacks: List[np.ndarray],
         delta=1,
         vmin=None,
         vmax=None,
@@ -66,11 +68,9 @@ class MultiStackPlotter:
         idx_fmt_fun=lambda i: "z = %i" % i,
         **plot_kwargs
     ):
-        self.stacks, self.n_stacks, self.slices = (
-            stacks,
-            len(stacks),
-            stacks[0].shape[0],
-        )
+        self.stacks = stacks
+        self.n_stacks = len(stacks)
+        self.slices = stacks[0].shape[0]
         self.delta, self.n_cols = delta, n_cols
         self.idx_fmt_fun = idx_fmt_fun
         self.n_rows = np.ceil(self.n_stacks / self.n_cols).astype(np.int)
@@ -555,6 +555,7 @@ def plot_stack(arr, delta=10, vmin=None, vmax=None, cmap="gray"):
     stack = StackPlotter(fig, ax, arr, delta, vmin, vmax, cmap)
     fig.tight_layout()
     plt.show()
+    return stack
 
 
 def array3d_to_frames(arr, mode="L"):
@@ -586,7 +587,7 @@ def normalize_uint8(arr, max_val=None):
 # def normalize_uint16(arr, max_val=None):
 #     max_val = arr.max() if max_val is None else max_val
 #     return (arr / max_val * 65535).clip(0, 65535).astype(np.uint16)
-def normalize_uint16(arr, max_val=None):
+def normalize_uint16(arr):
     arr -= np.min(arr)
     arr /= np.max(arr)
     return (arr * 65535).astype(np.uint16)
@@ -600,7 +601,7 @@ def array_to_gif(pth, fname, arr, max_val=None, downsample=1, time_ax=0, timeste
     if time_ax != 0:
         arr = np.moveaxis(arr, time_ax, 0)
 
-    arr = normalize_uint8(arr)
+    arr = normalize_uint8(arr, max_val=max_val)
     frames = [
         Image.fromarray(arr[i * downsample], mode="P")
         for i in range(int(arr.shape[0] / downsample))
@@ -838,7 +839,7 @@ def upscale(arr, factor, axes=[0, 1]):
     return arr.repeat(factor, axis=axes[0]).repeat(factor, axis=axes[1])
 
 
-def map_axis(f, arr, axis=-1):
+def map_axis(f: Callable[[np.ndarray], np.ndarray], arr: np.ndarray, axis=-1):
     """Map the specified axis (defaults to -1) with the function `f`. `f` should
      thus expect an ndarray with the shape created by `axis` and all of its
      'sub-axes'. The shape returned by `f` may differ from the original shape of
@@ -849,25 +850,51 @@ def map_axis(f, arr, axis=-1):
     - `arr` of shape (2, 5, 5) with `axis` = 1. f operates on an array of shape (5, 5).
     """
     in_shape = arr.shape
-    reshaped = arr.reshape(np.prod(in_shape[:axis]), *in_shape[axis:])
-    mapped = np.stack([f(a) for a in reshaped])
+    reshaped = arr.reshape(np.prod(in_shape[:axis]).astype(np.int), *in_shape[axis:])
+    mapped: np.ndarray = np.stack([f(a) for a in reshaped])
     if len(mapped.shape) == 1:
         return mapped.reshape(in_shape[:axis])
     else:
         return mapped.reshape(*in_shape[:axis], *mapped.shape[axis:])
 
 
-def moving_average(arr, n=3, axis=0):
+# def moving_average(arr: np.ndarray, n=3, axis=0) -> np.ndarray:
+#     """No padding moving average."""
+#     arr = np.moveaxis(arr, axis, 0) if axis != 0 else arr
+#     arr = np.cumsum(arr, axis=0)
+#     arr[n:] = arr[n:] - arr[:-n]
+#     arr = arr[n - 1 :] / n
+#     return np.moveaxis(arr, 0, axis) if axis != 0 else arr
+
+
+# def rolling_average(arr: np.ndarray, n=3, axis=0) -> np.ndarray:
+#     """Same as moving average, but with convolve and same padding."""
+#     arr = np.moveaxis(arr, axis, 0) if axis != 0 else arr
+#     arr = np.stack([np.convolve(a, np.ones(n), "same") for a in arr], axis=axis)
+#     return arr / n
+
+
+def moving_average(arr: np.ndarray, n=3, axis=-1) -> np.ndarray:
     """No padding moving average."""
-    arr = np.moveaxis(arr, axis, 0) if axis != 0 else arr
-    arr = np.cumsum(arr, axis=0)
-    arr[n:] = arr[n:] - arr[:-n]
-    arr = arr[n - 1 :] / n
-    return np.moveaxis(arr, 0, axis) if axis != 0 else arr
+
+    def f(a):
+        cs = np.cumsum(a)
+        cs[n:] = cs[n:] - cs[:-n]
+        return cs[n - 1 :] / n
+
+    return map_axis(f, arr, axis=axis)
 
 
-def rolling_average(arr, n=3, axis=0):
+def rolling_average(arr: np.ndarray, n=3, axis=-1) -> np.ndarray:
     """Same as moving average, but with convolve and same padding."""
-    arr = np.moveaxis(arr, axis, 0) if axis != 0 else arr
-    arr = np.stack([np.convolve(a, np.ones(n), "same") for a in arr], axis=axis)
-    return arr / n
+    ones = np.ones(n)
+    return map_axis(lambda a: np.convolve(a, ones, "same"), arr, axis=axis) / n
+
+
+def butter_lowpass(cutoff, fs, order=5):
+    return signal.butter(order, cutoff, fs=fs, btype="low", analog=False)
+
+
+def butter_lowpass_filter(data, cutoff, fs, order=5):
+    b, a = butter_lowpass(cutoff, fs, order=order)
+    return map_axis(lambda d: signal.lfilter(b, a, d), data)
