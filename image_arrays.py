@@ -26,11 +26,22 @@ class StackPlotter:
     arguments. Additionally, use delta to set the number of frames each step of
     the wheel skips through."""
 
-    def __init__(self, fig, ax, stack, delta=10, vmin=None, vmax=None, cmap="gray"):
+    def __init__(
+        self,
+        fig,
+        ax,
+        stack,
+        delta=10,
+        vmin=None,
+        vmax=None,
+        cmap="gray",
+        z_fmt_fun=lambda i: "z = %i" % i,
+    ):
         self.fig = fig
         self.ax = ax
         self.stack: np.ndarray = stack
         self.slices = stack.shape[0]
+        self.z_fmt_fun = z_fmt_fun
         self.idx = 0
         self.delta = delta
         self.im = ax.imshow(self.stack[self.idx, :, :], cmap=cmap, vmin=vmin, vmax=vmax)
@@ -46,7 +57,7 @@ class StackPlotter:
 
     def update(self):
         self.im.set_data(self.stack[self.idx, :, :])
-        self.ax.set_ylabel("z = %s" % self.idx)
+        self.ax.set_ylabel(self.z_fmt_fun(self.idx))
         self.im.axes.figure.canvas.draw()
 
     def connect_scroll(self):
@@ -198,11 +209,16 @@ class StackExplorer:
         roi_sz=1,
         vmin=None,
         vmax=None,
+        auto_roi_scale=False,
         cmap="gray",
         n_fmt_fun=None,
         trial_fmt_fun=None,
         **plot_kwargs
     ):
+        self.auto_roi_scale = auto_roi_scale
+        vmin = stack.min() if vmin is None else vmin
+        vmax = stack.max() if vmax is None else vmax
+
         if stack.ndim > 3:
             if stack.ndim == 5 and stack.shape[0] > 1:
                 self.ns = True
@@ -414,6 +430,8 @@ class StackExplorer:
         msg = "(click to %s)" % ("unlock" if self.roi_locked else "lock")
         self.beam_ax.set_title("x = %i; y = %i; %s" % (self.roi_x, self.roi_y, msg))
         beams = self.update_beams()
+        if self.auto_roi_scale:
+            self.beam_ax.set_ylim(beams.min(), beams.max())
         for i, line in enumerate(self.roi_lines):
             line.set_ydata(beams[i])
             line.set_color("red" if i == self.tr_idx else "black")
