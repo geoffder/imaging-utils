@@ -211,11 +211,14 @@ class StackExplorer:
         vmax=None,
         auto_roi_scale=False,
         cmap="gray",
+        z_fmt_fun=lambda i: "z = %i" % i,
         n_fmt_fun=None,
         trial_fmt_fun=None,
         **plot_kwargs
     ):
+        self.z_fmt_fun = z_fmt_fun
         self.auto_roi_scale = auto_roi_scale
+
         vmin = stack.min() if vmin is None else vmin
         vmax = stack.max() if vmax is None else vmax
 
@@ -423,7 +426,8 @@ class StackExplorer:
 
     def update_im(self):
         self.im.set_data(self.stack[self.n_idx, self.tr_idx, self.z_idx, :, :])
-        self.stack_ax.set_ylabel("z = %s" % self.z_idx)
+        # self.stack_ax.set_ylabel("z = %s" % self.z_idx)
+        self.stack_ax.set_ylabel(self.z_fmt_fun(self.z_idx))
         self.im.axes.figure.canvas.draw()
 
     def update_roi(self):
