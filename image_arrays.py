@@ -462,11 +462,13 @@ class PeakExplorer:
         tolerance=0.5,
         distance=1,
         title_fmt_fun=lambda i: "roi = %i" % i,
+        auto_y_scale=True,
     ):
         self.xaxis, self.recs = xaxis, recs
         self.n_rois, self.pts = recs.shape
         self.prominence, self.width = prominence, width
         self.tolerance, self.distance = tolerance, distance
+        self.auto_y_scale = auto_y_scale
         self.title_fmt_fun = title_fmt_fun
 
         self.build_fig()
@@ -551,7 +553,8 @@ class PeakExplorer:
         rec = self.recs[self.idx]
         self.rec_line.set_ydata(rec)
         self.peak_line.set_data(self.xaxis[self.peaks], rec[self.peaks])
-        self.rec_ax.set_ylim(rec.min(), rec.max())
+        if self.auto_y_scale:
+            self.rec_ax.set_ylim(rec.min(), rec.max())
 
     def refresh(self):
         self.update_peaks()
