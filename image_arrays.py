@@ -728,7 +728,7 @@ def avg_trigger_window(
     post_shift = post_shift[legal]
 
     if prominences is None:
-        weights = np.ones(len(times)) / len(times)
+        weights = np.ones(len(post_shift)) / len(post_shift)
     else:
         if max_prominence is not None:
             weights = np.clip(prominences[legal], 0, max_prominence)
