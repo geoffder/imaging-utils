@@ -9,6 +9,7 @@ from skimage import io
 from skimage.measure import block_reduce
 
 from image_arrays import *
+from s2p_packer import pack_hdf
 
 
 def is_tiff(name):
@@ -46,7 +47,21 @@ def pipeline_map_tiff(pth, label, *funcs, out_pth=None):
     map_tiff(f, pth, label, out_pth=out_pth)
 
 
-def multi_trial_tiff_pipeline(pth, label, *funcs, out_pth=None):
+def single_trial_tiff_pipeline(pth, label, *funcs, out_pth=None, h5_out=False):
+    names = [f for f in os.listdir(pth) if (f.endswith(".tiff") or f.endswith(".tif"))]
+    fn = reduce(compose, funcs, lambda a: a)
+    for n in names:
+        mapped = remove_offset(fn(io.imread(os.path.join(pth, n))))
+        full_out_path = prepare_full_path(os.path.join(pth, n), label, out_pth)
+        if not h5_out:
+            imsave(full_out_path, normalize_uint16(mapped))
+        else:
+            n, _ = os.path.splitext(full_out_path)
+            pack_hdf(n, {"stack": mapped})
+        del mapped
+
+
+def multi_trial_tiff_pipeline(pth, label, *funcs, out_pth=None, h5_out=False):
     """Like `pipeline_map_tiff`, but processes the folder given by path as set
     of trials performed on the same scan field, with the same stimuli. Thus, the
     given `funcs` should all be able to operate on 4-dimensional arrays of shape
@@ -55,9 +70,16 @@ def multi_trial_tiff_pipeline(pth, label, *funcs, out_pth=None):
     names = [f for f in os.listdir(pth) if (f.endswith(".tiff") or f.endswith(".tif"))]
     stacks = np.stack([io.imread(os.path.join(pth, f)) for f in names], axis=0)
     mapped = reduce(compose, funcs, lambda a: a)(stacks)
-    for name, s in zip(names, normalize_uint16(remove_offset(mapped))):
+    del stacks
+    for name, s in zip(names, remove_offset(mapped)):
         full_out_path = prepare_full_path(os.path.join(pth, name), label, out_pth)
-        imsave(full_out_path, s)
+        if not h5_out:
+            imsave(full_out_path, normalize_uint16(s))
+        else:
+            n, _ = os.path.splitext(full_out_path)
+            pack_hdf(n, {"stack": s})
+        del s
+    del mapped
 
 
 def block_reduce_tiff(pth, reducer, block_size=(1, 2, 2), pad_val=0, **reducer_kwargs):
@@ -104,7 +126,9 @@ def snr_threshold(arr, bsln_start, bsln_end, stim_start, stim_end, thresh, mask_
     return arr
 
 
-def process_folders(base_path, new_base, *funcs, copy_dirs={"noise"}, multi_trial=True):
+def process_folders(
+    base_path, new_base, *funcs, copy_dirs={"noise"}, multi_trial=True, h5_out=False
+):
     def loop(child_path):
         pth = os.path.join(base_path, child_path)
         contents = os.listdir(pth)
@@ -120,18 +144,32 @@ def process_folders(base_path, new_base, *funcs, copy_dirs={"noise"}, multi_tria
                 else:
                     loop(os.path.join(child_path, c))
         if len(names) > 0:
-            if multi_trial:
-                multi_trial_tiff_pipeline(
-                    pth, "", *funcs, out_pth=os.path.join(new_base, child_path)
-                )
-            else:
-                for n in names:
-                    pipeline_map_tiff(
-                        os.path.join(pth, n),
-                        "",
-                        *funcs,
-                        out_pth=os.path.join(new_base, child_path)
-                    )
+            pipeline = (
+                multi_trial_tiff_pipeline if multi_trial else single_trial_tiff_pipeline
+            )
+            pipeline(
+                pth,
+                "",
+                *funcs,
+                out_pth=os.path.join(new_base, child_path),
+                h5_out=h5_out
+            )
+            # if multi_trial:
+            #     multi_trial_tiff_pipeline(
+            #         pth,
+            #         "",
+            #         *funcs,
+            #         out_pth=os.path.join(new_base, child_path),
+            #         h5_out=h5_out
+            #     )
+            # else:
+            #     for n in names:
+            #         pipeline_map_tiff(
+            #             os.path.join(pth, n),
+            #             "",
+            #             *funcs,
+            #             out_pth=os.path.join(new_base, child_path)
+            #         )
 
     loop("")
 
