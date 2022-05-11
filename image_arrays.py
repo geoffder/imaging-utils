@@ -707,7 +707,6 @@ def avg_trigger_window(
     stim_t,
     stim,
     rec_t,
-    rec,
     lead_time,
     post_time,
     trigger_idxs,
@@ -720,7 +719,7 @@ def avg_trigger_window(
     """Rough implementation of threshold triggered averaging of a stimulus."""
     duration = lead_time + post_time
     n_frames = nearest_index(stim_t, np.min(stim_t) + duration)
-    times = rec_t[trigger_idxs]
+    times = rec_t[(trigger_idxs)]
     post_shift = times + post_time
     start_time = np.min(stim_t) if start_time is None else start_time
     end_time = np.max(stim_t) if end_time is None else end_time
@@ -875,28 +874,16 @@ def map_axis(f: Callable[[np.ndarray], np.ndarray], arr: np.ndarray, axis=-1):
     - `arr` of shape (2, 5, 5) with `axis` = 1. f operates on an array of shape (5, 5).
     """
     in_shape = arr.shape
-    reshaped = arr.reshape(np.prod(in_shape[:axis]).astype(np.int), *in_shape[axis:])
-    mapped: np.ndarray = np.stack([f(a) for a in reshaped])
-    if len(mapped.shape) == 1:
-        return mapped.reshape(in_shape[:axis])
+    if len(in_shape) > 1:
+        reshaped = arr.reshape(np.prod(in_shape[:axis]).astype(int), *in_shape[axis:])
+        mapped: np.ndarray = np.stack([f(a) for a in reshaped], axis=0)
+
+        if len(mapped.shape) == 1:
+            return mapped.reshape(in_shape[:axis])
+        else:
+            return mapped.reshape(*in_shape[:axis], *mapped.shape[1:])
     else:
-        return mapped.reshape(*in_shape[:axis], *mapped.shape[axis:])
-
-
-# def moving_average(arr: np.ndarray, n=3, axis=0) -> np.ndarray:
-#     """No padding moving average."""
-#     arr = np.moveaxis(arr, axis, 0) if axis != 0 else arr
-#     arr = np.cumsum(arr, axis=0)
-#     arr[n:] = arr[n:] - arr[:-n]
-#     arr = arr[n - 1 :] / n
-#     return np.moveaxis(arr, 0, axis) if axis != 0 else arr
-
-
-# def rolling_average(arr: np.ndarray, n=3, axis=0) -> np.ndarray:
-#     """Same as moving average, but with convolve and same padding."""
-#     arr = np.moveaxis(arr, axis, 0) if axis != 0 else arr
-#     arr = np.stack([np.convolve(a, np.ones(n), "same") for a in arr], axis=axis)
-#     return arr / n
+        return f(arr)
 
 
 def moving_average(arr: np.ndarray, n=3, axis=-1) -> np.ndarray:
