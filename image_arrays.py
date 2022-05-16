@@ -1,17 +1,14 @@
-from typing import Any, Callable, Tuple, List
+from typing import Any, Callable, List
 import os
 import h5py as h5
+
 import numpy as np
+from scipy import signal
+
 import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle
 from matplotlib.widgets import TextBox, Slider
 
-from skimage import io
-from scipy import signal
-from PIL import Image
-from tifffile import imsave
-
-from s2p_packer import roi_movie, unpack_hdf
 
 """
 NOTE: Discoveries in working with suite2p again.
@@ -71,8 +68,8 @@ class MultiStackPlotter:
         self,
         stacks: List[np.ndarray],
         delta=1,
-        vmin=None,
-        vmax=None,
+        vmin: Any = None,
+        vmax: Any = None,
         n_cols=2,
         cmap="gray",
         title_fmt_fun=lambda i: "trial = %i" % i,
@@ -84,7 +81,7 @@ class MultiStackPlotter:
         self.slices = stacks[0].shape[0]
         self.delta, self.n_cols = delta, n_cols
         self.idx_fmt_fun = idx_fmt_fun
-        self.n_rows = np.ceil(self.n_stacks / self.n_cols).astype(np.int)
+        self.n_rows = np.ceil(self.n_stacks / self.n_cols).astype(int)
         self.fig, self.ax = plt.subplots(self.n_rows, self.n_cols, **plot_kwargs)
         self.idx = 0
         self.plots = []
@@ -149,7 +146,7 @@ class MultiWavePlotter:
         self.waves, self.n_waves, self.slices = waves, len(waves), waves[0].shape[0]
         self.delta, self.n_cols = delta, n_cols
         self.idx_fmt_fun = idx_fmt_fun
-        self.n_rows = np.ceil(self.n_waves / self.n_cols).astype(np.int)
+        self.n_rows = np.ceil(self.n_waves / self.n_cols).astype(int)
         self.fig, self.ax = plt.subplots(self.n_rows, self.n_cols, **plot_kwargs)
         self.idx = 0
         self.lines = {i: [] for i in range(self.n_waves)}
@@ -408,8 +405,8 @@ class StackExplorer:
             and event.inaxes == self.stack_ax
             and not (event.xdata is None or event.ydata is None)
         ):
-            x = np.round(event.xdata).astype(np.int)
-            y = np.round(event.ydata).astype(np.int)
+            x = np.round(event.xdata).astype(int)
+            y = np.round(event.ydata).astype(int)
             if (
                 0 <= x < self.x_sz
                 and 0 <= y < self.y_sz
@@ -583,68 +580,8 @@ def plot_stack(arr, delta=10, vmin=None, vmax=None, cmap="gray"):
     return stack
 
 
-def array3d_to_frames(arr, mode="L"):
-    return [Image.fromarray(arr[i], mode=mode) for i in range(arr.shape[0])]
-
-
-def save_frames(fpath, ext, frames, timestep=40):
-    """Save list of Image objects as a file with the given ext, e.g. tiff or gif."""
-    frames[0].save(
-        fpath + "." + ext,
-        save_all=True,
-        append_images=frames[1:],
-        duration=timestep,
-        loop=0,
-        optimize=False,
-        pallete="I",
-    )
-
-
 def remove_offset(arr):
     return arr - arr.min()
-
-
-def normalize_uint8(arr, max_val=None):
-    max_val = arr.max() if max_val is None else max_val
-    return (arr / max_val * 255).clip(0, 255).astype(np.uint8)
-
-
-# def normalize_uint16(arr, max_val=None):
-#     max_val = arr.max() if max_val is None else max_val
-#     return (arr / max_val * 65535).clip(0, 65535).astype(np.uint16)
-def normalize_uint16(arr):
-    arr -= np.min(arr)
-    arr /= np.max(arr)
-    return (arr * 65535).astype(np.uint16)
-
-
-def array_to_gif(pth, fname, arr, max_val=None, downsample=1, time_ax=0, timestep=40):
-    """Takes desired path and filename (without extension) and a numpy matrix and saves
-    it as a GIF using the PIL.Image module. If time_ax indicates that the time dim
-    is not first, then it will be moved to make the shape = (T, H, W).
-    """
-    if time_ax != 0:
-        arr = np.moveaxis(arr, time_ax, 0)
-
-    arr = normalize_uint8(arr, max_val=max_val)
-    frames = [
-        Image.fromarray(arr[i * downsample], mode="P")
-        for i in range(int(arr.shape[0] / downsample))
-    ]
-
-    os.makedirs(pth, exist_ok=True)
-    save_frames(os.path.join(pth, fname), "gif", frames, timestep=timestep)
-
-
-def array_to_tiff(pth, fname, arr, time_ax=0, max_val=None, hq=True):
-    """Use tifffile library to save 16-bit tiff stack. (PIL can only do 8-bit)."""
-    if time_ax != 0:
-        arr = np.moveaxis(arr, time_ax, 0)
-
-    norm = normalize_uint16 if hq else normalize_uint8
-
-    os.makedirs(pth, exist_ok=True)
-    imsave(os.path.join(pth, fname) + ".tif", norm(arr, max_val))
 
 
 def array_to_h5(pth, fname, arr, time_ax=0):
@@ -654,23 +591,6 @@ def array_to_h5(pth, fname, arr, time_ax=0):
     os.makedirs(pth, exist_ok=True)
     with h5.File(os.path.join(pth, fname) + ".h5", "w") as f:
         f.create_dataset("data", data=arr)
-
-
-def re_export_tiff(pth, fname):
-    """Load and re-save tiff. Helpful for dropping bioimage meta-data and formatting
-    so that they can be treated as 'normal' tiffs."""
-    out_pth = os.path.join(pth, "re_export")
-    os.makedirs(out_pth, exist_ok=True)
-    imsave(os.path.join(out_pth, fname), io.imread(os.path.join(pth, fname)))
-
-
-def re_export_folder(pth):
-    out_pth = os.path.join(pth, "re_export")
-    os.makedirs(out_pth, exist_ok=True)
-    for fname in os.listdir(pth):
-        if not (fname.endswith(".tiff") or fname.endswith(".tif")):
-            continue
-        imsave(os.path.join(out_pth, fname), io.imread(os.path.join(pth, fname)))
 
 
 def simple_upsample_2D(arr, y=1, x=1):
@@ -804,59 +724,6 @@ def quality_index(arr):
     measuring how much of the variance in each trial explained by signals
     present across all trials."""
     return np.var(np.mean(arr, axis=0)) / np.mean(np.var(arr, axis=1))
-
-
-def load_gif(pth):
-    """Load in multiframe gif into numpy array."""
-    img = Image.open(pth)
-    stack = []
-    for i in range(img.n_frames):
-        img.seek(i)
-        stack.append(np.array(img))
-    return np.stack(stack, axis=0)
-
-
-def save_tiff(pth, name, tiff):
-    os.makedirs(pth, exist_ok=True)
-    imsave(os.path.join(pth, name), tiff)
-
-
-def pixels_to_s2p_stats(pixels):
-    return {
-        int(i): {"xpix": px["x"], "ypix": px["y"], "lam": px["weights"]}
-        for i, px in pixels.items()
-    }
-
-
-def pixels_to_beams(rec, pixels, use_weights=True):
-    if use_weights:
-        roi_sum = lambda frame, xs, ys, ws: (
-            np.sum([frame[x, y] * w for x, y, w in zip(xs, ys, ws)])
-        )
-    else:
-        roi_sum = lambda frame, xs, ys, _: (
-            np.sum([frame[x, y] for x, y in zip(xs, ys)])
-        )
-
-    return np.array(
-        [
-            [roi_sum(fr, px["x"], px["y"], px["weights"]) for fr in rec]
-            for px in pixels.values()
-        ]
-    )
-
-
-def beams_to_movie(beams, pixels, space_dims):
-    return roi_movie(beams, pixels_to_s2p_stats(pixels), (beams.shape[1], *space_dims))
-
-
-def s2p_hdf_to_roi_movie(pth):
-    with h5.File(pth, "r") as f:
-        data = unpack_hdf(f)
-
-    return beams_to_movie(
-        data["recs"] - data["Fneu"] * 0.7, data["pixels"], data["space_dims"]
-    )
 
 
 def upscale(arr, factor, axes=[0, 1]):

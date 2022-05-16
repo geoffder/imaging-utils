@@ -1,70 +1,8 @@
-import sys
 import os
-import shutil
-import re
-
-import h5py as h5
 import numpy as np
-from skimage import io
-from PIL import Image, ImagePalette
 
-
-# def normalize_uint8(arr, max_val=None):
-#     max_val = arr.max() if max_val is None else max_val
-#     return (arr / max_val * 255).clip(0, 255).astype(np.uint8)
-
-
-def normalize_uint8(arr, max_val=None):
-    arr -= np.min(arr)
-    arr /= np.max(arr)
-    return (arr * 255).astype(np.uint8)
-    # return arr * 255
-    # return (arr * 127).astype(np.uint8)
-    # return arr
-
-
-def save_frames(fpath, ext, frames, timestep=40):
-    frames[0].save(
-        fpath + "." + ext,
-        save_all=True,
-        append_images=frames[1:],
-        duration=timestep,
-        loop=0,
-        optimize=False,
-        mode="L",
-        palette="L",
-        # palette=ImagePalette.ImagePalette(mode="L"),
-    )
-
-
-def array_to_gif(pth, fname, arr, max_val=None, downsample=1, time_ax=0, timestep=40):
-    """Takes desired path and filename (without extension) and a numpy matrix and saves
-    it as a GIF using the PIL.Image module. If time_ax indicates that the time dim
-    is not first, then it will be moved to make the shape = (T, H, W).
-    """
-    if time_ax != 0:
-        arr = np.moveaxis(arr, time_ax, 0)
-
-    arr = normalize_uint8(arr)
-    frames = []
-    for i in range(int(arr.shape[0] / downsample)):
-        img = Image.fromarray(arr[i * downsample], mode="P")
-        # img.putpalette(b"L")
-        # img = img.convert("L")
-        frames.append(img)
-
-    # frames = [
-    #     Image.fromarray(arr[i * downsample], mode="L").putpalette(
-    #         ImagePalette.ImagePalette(mode="L")
-    #     )
-    #     # Image.fromarray(arr[i * downsample]).convert("L")
-    #     # Image.fromarray(arr[i * downsample], mode="L")
-    #     # Image.fromarray(arr[i * downsample])
-    #     for i in range(int(arr.shape[0] / downsample))
-    # ]
-
-    os.makedirs(pth, exist_ok=True)
-    save_frames(os.path.join(pth, fname), "gif", frames, timestep=timestep)
+from image_output import array_to_gif
+from hdf_utils import *
 
 
 def get_suite2p_data(pth, exclude_non_cells=False):
@@ -82,7 +20,7 @@ def get_suite2p_data(pth, exclude_non_cells=False):
     # narrow down selection to those ROIs determined to be "cells" by suite2p
     if exclude_non_cells:
         cell_ids = np.nonzero(
-            np.load(os.path.join(pth, "iscell.npy"))[:, 0].astype(np.int)
+            np.load(os.path.join(pth, "iscell.npy"))[:, 0].astype(int)
         )[0]
         recs = recs[cell_ids, :]
         neu = neu[cell_ids, :]
@@ -114,29 +52,6 @@ def roi_movie(beams, stats, dims):
             i
         ].reshape(-1, 1)
     return arr
-
-
-def pack_hdf(pth, data_dict, compression="gzip"):
-    """Takes data organized in a python dict, and creates an hdf5 with the
-    same structure."""
-
-    def rec(data, grp):
-        for k, v in data.items():
-            if type(v) is dict:
-                rec(v, grp.create_group(k))
-            else:
-                grp.create_dataset(k, data=v, compression=compression)
-
-    with h5.File(pth + ".h5", "w") as pckg:
-        rec(data_dict, pckg)
-
-
-def unpack_hdf(group):
-    """Recursively unpack an hdf5 of nested Groups (and Datasets) to dict."""
-    return {
-        k: v[()] if type(v) is h5._hl.dataset.Dataset else unpack_hdf(v)
-        for k, v in group.items()
-    }
 
 
 def pack_suite2p(
@@ -191,42 +106,39 @@ def pack_suite2p(
     del (recs, neu, pixels, masks)
 
 
-if __name__ == "__main__":
-    settings = {}
-    for arg in sys.argv[1:]:
-        try:
-            k, v = arg.split("=")
-        except:
-            msg = "Invalid argument format. Given %s, but expecting " % arg
-            msg += "a key value pair delimited by '=' (e.g. gif_timestep=100)."
-            print(msg)
-        settings[k] = v
+def pixels_to_s2p_stats(pixels):
+    return {
+        int(i): {"xpix": px["x"], "ypix": px["y"], "lam": px["weights"]}
+        for i, px in pixels.items()
+    }
 
-    base_path = os.getcwd()
-    names = [
-        f for f in os.listdir(base_path) if (f.endswith(".tiff") or f.endswith(".tif"))
-    ]
-    stacks = [io.imread(os.path.join(base_path, f)) for f in names]
 
-    trial_pts = (
-        {re.sub("\.tif?[f]", "", f): s.shape[0] for f, s in zip(names, stacks)}
-        if len(names) > 0
-        else None
+def pixels_to_beams(rec, pixels, use_weights=True):
+    if use_weights:
+        roi_sum = lambda frame, xs, ys, ws: (
+            np.sum([frame[x, y] * w for x, y, w in zip(xs, ys, ws)])
+        )
+    else:
+        roi_sum = lambda frame, xs, ys, _: (
+            np.sum([frame[x, y] for x, y in zip(xs, ys)])
+        )
+
+    return np.array(
+        [
+            [roi_sum(fr, px["x"], px["y"], px["weights"]) for fr in rec]
+            for px in pixels.values()
+        ]
     )
 
-    space_dims = stacks[0].shape[1:]
-    out_path = os.path.join(base_path, "s2p")
-    os.makedirs(out_path, exist_ok=True)
-    out_name = re.sub("\.tif?[f]", "", names[0])
-    s2p_pth = os.path.join(base_path, "suite2p", "plane0")
 
-    pack_suite2p(
-        s2p_pth,
-        out_path,
-        out_name,
-        space_dims,
-        trial_pts=trial_pts,
-        gif_timestep=int(settings.get("gif_timestep", 200)),
-        exclude_non_cells=int(settings.get("only_cells", 0)),
-        denoised_movies=bool(int(settings.get("gen_movies", 0))),
+def beams_to_movie(beams, pixels, space_dims):
+    return roi_movie(beams, pixels_to_s2p_stats(pixels), (beams.shape[1], *space_dims))
+
+
+def s2p_hdf_to_roi_movie(pth):
+    with h5.File(pth, "r") as f:
+        data = unpack_hdf(f)
+
+    return beams_to_movie(
+        data["recs"] - data["Fneu"] * 0.7, data["pixels"], data["space_dims"]
     )
