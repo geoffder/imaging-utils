@@ -454,7 +454,7 @@ class PeakExplorer:
         self,
         xaxis,
         recs,
-        threshold=1,
+        threshold=0,
         prominence=1,
         width=2,
         tolerance=0.5,
@@ -671,6 +671,10 @@ def avg_trigger_window(
     end_time = np.max(stim_t) if end_time is None else end_time
     legal = (post_shift - duration > start_time) * (post_shift <= end_time)
     post_shift = post_shift[legal]
+    window = np.zeros((n_frames, stim.shape[1], stim.shape[2]))
+
+    if len(post_shift) == 0:
+        return window, []
 
     if prominences is None:
         weights = np.ones(len(post_shift)) / len(post_shift)
@@ -681,11 +685,9 @@ def avg_trigger_window(
             weights = prominences[legal]
 
         if nonlinear_weighting:
-            weights = soft_max(weights)
+            weights = soft_max(weights / np.max(weights))  # prevent overflow
         else:
             weights = weights / np.sum(weights)
-
-    window = np.zeros((n_frames, stim.shape[1], stim.shape[2]))
 
     for t, w in zip(post_shift, weights):
         window += lead_window(stim_t, stim, t, n_frames) * w
