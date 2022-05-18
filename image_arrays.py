@@ -454,17 +454,19 @@ class PeakExplorer:
         self,
         xaxis,
         recs,
+        threshold=1,
         prominence=1,
         width=2,
         tolerance=0.5,
+        wlen=None,
         distance=1,
         title_fmt_fun=lambda i: "roi = %i" % i,
         auto_y_scale=True,
     ):
         self.xaxis, self.recs = xaxis, recs
         self.n_rois, self.pts = recs.shape
-        self.prominence, self.width = prominence, width
-        self.tolerance, self.distance = tolerance, distance
+        self.threshold, self.prominence, self.width = threshold, prominence, width
+        self.tolerance, self.wlen, self.distance = tolerance, wlen, distance
         self.auto_y_scale = auto_y_scale
         self.title_fmt_fun = title_fmt_fun
 
@@ -481,24 +483,37 @@ class PeakExplorer:
 
     def build_fig(self):
         self.fig = plt.figure(constrained_layout=True, figsize=(6, 6))
-        gs = self.fig.add_gridspec(nrows=3, ncols=2, height_ratios=[0.8, 0.1, 0.1])
+        gs = self.fig.add_gridspec(nrows=3, ncols=3, height_ratios=[0.8, 0.1, 0.1])
         self.rec_ax = self.fig.add_subplot(gs[0, :])
-        self.prom_ax = self.fig.add_subplot(gs[1, 0])
-        self.width_ax = self.fig.add_subplot(gs[1, 1])
+        self.thresh_ax = self.fig.add_subplot(gs[1, 0])
+        self.prom_ax = self.fig.add_subplot(gs[1, 1])
+        self.width_ax = self.fig.add_subplot(gs[1, 2])
         self.toler_ax = self.fig.add_subplot(gs[2, 0])
-        self.dist_ax = self.fig.add_subplot(gs[2, 1])
+        self.wlen_ax = self.fig.add_subplot(gs[2, 1])
+        self.dist_ax = self.fig.add_subplot(gs[2, 2])
         self.rec_ax.set_title(self.title_fmt_fun(0))
         self.rec_ax.set_xlabel("Time (s)")
-        self.prom_ax.set_title("Peak Prominence")
-        self.width_ax.set_title("Peak Width")
-        self.toler_ax.set_title("Peak Tolerance")
-        self.dist_ax.set_title("Min Distance Between")
+        self.thresh_ax.set_title("Threshold")
+        self.prom_ax.set_title("Prominence")
+        self.width_ax.set_title("Width")
+        self.toler_ax.set_title("Tolerance")
+        self.wlen_ax.set_title("Window Size")
+        self.dist_ax.set_title("Min Interval")
 
     def build_inputs(self):
+        self.thresh_box = TextBox(self.thresh_ax, "", initial=str(self.threshold))
         self.prom_box = TextBox(self.prom_ax, "", initial=str(self.prominence))
         self.width_box = TextBox(self.width_ax, "", initial=str(self.width))
         self.toler_box = TextBox(self.toler_ax, "", initial=str(self.tolerance))
+        self.wlen_box = TextBox(self.wlen_ax, "", initial=str(self.wlen))
         self.dist_box = TextBox(self.dist_ax, "", initial=str(self.distance))
+
+    def set_threshold(self, s):
+        try:
+            self.threshold = float(s)
+            self.refresh()
+        except:
+            self.thresh_box.set_val(str(self.threshold))
 
     def set_prominence(self, s):
         try:
@@ -536,12 +551,22 @@ class PeakExplorer:
         except ValueError:
             self.dist_box.set_val(str(self.distance))
 
+    def set_wlen(self, s):
+        try:
+            self.wlen = int(s)
+            self.refresh()
+        except:
+            self.wlen = None
+            self.wlen_box.set_val(str(None))
+
     def update_peaks(self):
         self.peaks, _ = signal.find_peaks(
             self.recs[self.idx],
+            threshold=self.threshold,
             prominence=self.prominence,
             rel_height=self.tolerance,
             width=self.width,
+            wlen=self.wlen,
             distance=self.distance,
         )
 
@@ -566,9 +591,11 @@ class PeakExplorer:
 
     def connect_events(self):
         self.fig.canvas.mpl_connect("scroll_event", self.on_scroll)
+        self.thresh_box.on_submit(self.set_threshold)
         self.prom_box.on_submit(self.set_prominence)
         self.width_box.on_submit(self.set_width)
         self.toler_box.on_submit(self.set_tolerance)
+        self.wlen_box.on_submit(self.set_wlen)
         self.dist_box.on_submit(self.set_distance)
 
 
@@ -605,12 +632,11 @@ def nearest_index(arr, v):
     return np.abs(arr - v).argmin()
 
 
-def lead_window(stim_t, stim, stop, duration):
-    """Get slice of stimulus stack preceding the the timestamp `stop`, using the
-    time axis stim_t to look up the relevant indices."""
-    start_idx = nearest_index(stim_t, stop - duration)
+def lead_window(stim_t, stim, stop, n_frames):
+    """Get slice of length `n_frames` from the stimulus stack preceding the the
+    timestamp `stop`, using the time axis `stim_t` to look up the relevant index."""
     stop_idx = nearest_index(stim_t, stop)
-    return stim[start_idx:stop_idx, :, :]
+    return stim[(stop_idx - n_frames) : stop_idx, :, :]
 
 
 def soft_max(x):
@@ -639,7 +665,7 @@ def avg_trigger_window(
     """Rough implementation of threshold triggered averaging of a stimulus."""
     duration = lead_time + post_time
     n_frames = nearest_index(stim_t, np.min(stim_t) + duration)
-    times = rec_t[(trigger_idxs)]
+    times = rec_t[trigger_idxs]
     post_shift = times + post_time
     start_time = np.min(stim_t) if start_time is None else start_time
     end_time = np.max(stim_t) if end_time is None else end_time
@@ -662,7 +688,7 @@ def avg_trigger_window(
     window = np.zeros((n_frames, stim.shape[1], stim.shape[2]))
 
     for t, w in zip(post_shift, weights):
-        window += lead_window(stim_t, stim, t, duration) * w
+        window += lead_window(stim_t, stim, t, n_frames) * w
 
     return window, times[legal]
 
