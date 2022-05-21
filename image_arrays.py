@@ -669,7 +669,9 @@ def avg_trigger_window(
     post_shift = times + post_time
     start_time = np.min(stim_t) if start_time is None else start_time
     end_time = np.max(stim_t) if end_time is None else end_time
-    legal = (post_shift - duration > start_time) * (post_shift <= end_time)
+    legal = ((post_shift - duration > start_time) * (post_shift <= end_time)).astype(
+        bool
+    )
     post_shift = post_shift[legal]
     window = np.zeros((n_frames, stim.shape[1], stim.shape[2]))
 
