@@ -74,6 +74,7 @@ class MultiStackPlotter:
         cmap="gray",
         title_fmt_fun=lambda i: "trial = %i" % i,
         idx_fmt_fun=lambda i: "z = %i" % i,
+        dims=None,
         **plot_kwargs
     ):
         self.stacks = stacks
@@ -95,6 +96,18 @@ class MultiStackPlotter:
         elif type(vmax) == "dict" and "default" not in vmax:
             vmax["default"] = None
 
+        if dims is None:
+            extents = [None for _ in range(self.n_stacks)]
+        elif type(dims) == tuple:
+            w, h = dims
+            extents = [(0.0, w, h, 0.0) for _ in range(self.n_stacks)]
+        elif len(dims) == self.n_stacks:
+            extents = [(0.0, w, h, 0.0) for w, h in dims]
+        else:
+            raise ValueError(
+                "dims must be tuple or list of tuples with same lenght as stacks."
+            )
+
         i = 0
         for row in self.ax:
             for a in row:
@@ -105,6 +118,7 @@ class MultiStackPlotter:
                             cmap=cmap,
                             vmin=vmin.get(i, vmin["default"]),
                             vmax=vmax.get(i, vmax["default"]),
+                            extent=extents[i],
                         )
                     )
                     a.set_title(title_fmt_fun(i))
@@ -211,6 +225,7 @@ class StackExplorer:
         z_fmt_fun=lambda i: "z = %i" % i,
         n_fmt_fun=None,
         trial_fmt_fun=None,
+        dims=None,
         **plot_kwargs
     ):
         self.z_fmt_fun = z_fmt_fun
@@ -290,11 +305,15 @@ class StackExplorer:
         self.zaxis = np.arange(self.z_sz) if zaxis is None else zaxis
         self.roi_locked = False
 
+        self.width, self.height = (self.x_sz, self.y_sz) if dims is None else dims
+        self.x_frac = self.width / (self.x_sz)
+        self.y_frac = self.height / (self.y_sz)
+        extent = (0, self.width, self.height, 0)
         self.roi_x_sz, self.roi_y_sz = (
             roi_sz if type(roi_sz) == tuple else (roi_sz, roi_sz)
         )
 
-        self.build_stack_ax(cmap, vmin, vmax)
+        self.build_stack_ax(cmap, vmin, vmax, extent)
         self.build_roi_ax(vmin, vmax)
         if self.ns:
             self.build_n_slide_ax()
@@ -327,17 +346,18 @@ class StackExplorer:
         )
         self.trial_slide_ax.set_title(self.trial_fmt_fun(0))
 
-    def build_stack_ax(self, cmap, vmin, vmax):
+    def build_stack_ax(self, cmap, vmin, vmax, extent):
         self.im = self.stack_ax.imshow(
             self.stack[self.n_idx, self.tr_idx, self.z_idx, :, :],
             cmap=cmap,
             vmin=vmin,
             vmax=vmax,
+            extent=extent,
         )
         self.roi_rect = Rectangle(
-            (self.roi_x - 0.5, self.roi_y - 0.5),
-            self.roi_x_sz,
-            self.roi_y_sz,
+            (0.0, 0.0),
+            self.roi_x_sz * self.x_frac,
+            self.roi_y_sz * self.y_frac,
             fill=False,
             color="red",
             linewidth=2,
@@ -405,15 +425,15 @@ class StackExplorer:
             and event.inaxes == self.stack_ax
             and not (event.xdata is None or event.ydata is None)
         ):
-            x = np.round(event.xdata).astype(int)
-            y = np.round(event.ydata).astype(int)
+            x = np.floor(event.xdata / self.x_frac).astype(int)
+            y = np.floor(event.ydata / self.y_frac).astype(int)
             if (
-                0 <= x < self.x_sz
-                and 0 <= y < self.y_sz
+                0 <= x <= (self.x_sz - self.roi_x_sz)
+                and 0 <= y <= (self.y_sz - self.roi_y_sz)
                 and (self.roi_x != x or self.roi_y != y)
             ):
                 self.roi_x, self.roi_y = x, y
-                self.roi_rect.set_xy((self.roi_x - 0.5, self.roi_y - 0.5))
+                self.roi_rect.set_xy((x * self.x_frac, y * self.y_frac))
                 self.update_roi()
 
     def on_im_click(self, event):
