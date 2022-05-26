@@ -10,13 +10,6 @@ from matplotlib.patches import Rectangle
 from matplotlib.widgets import TextBox, Slider
 
 
-"""
-NOTE: Discoveries in working with suite2p again.
-- Can provide data as h5 archives with a stack stored under the key "data"
-- h5 array data cannot be float, must be uint16 (like a tiff)
-"""
-
-
 class StackPlotter:
     """Returns Object for cycling through frames of a 3D image stack using the
     mouse scroll wheel. Takes the pyplot axis object and data as the first two
