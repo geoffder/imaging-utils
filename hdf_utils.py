@@ -1,5 +1,7 @@
 import h5py as h5
 
+INT_PREFIX = "packed_int_"
+
 
 def pack_hdf(pth, data_dict, compression="gzip"):
     """Takes data organized in a python dict, and creates an hdf5 with the
@@ -7,10 +9,10 @@ def pack_hdf(pth, data_dict, compression="gzip"):
 
     def rec(data, grp):
         for k, v in data.items():
-            typ = type(v)
-            if typ is dict:
+            k = "%s%i" % (INT_PREFIX, k) if isinstance(k, int) else k
+            if isinstance(v, dict):
                 rec(v, grp.create_group(k))
-            elif typ == float or typ == int:
+            elif isinstance(v, float) or isinstance(v, int):
                 grp.create_dataset(k, data=v)  # can't compress scalars
             else:
                 grp.create_dataset(k, data=v, compression=compression)
@@ -21,6 +23,14 @@ def pack_hdf(pth, data_dict, compression="gzip"):
 
 def unpack_hdf(group):
     """Recursively unpack an hdf5 of nested Groups (and Datasets) to dict."""
+
+    def fix_key(k):
+        if isinstance(k, str) and k.startswith(INT_PREFIX):
+            return int(k[len(INT_PREFIX) :])
+        else:
+            return k
+
     return {
-        k: v[()] if type(v) is h5.Dataset else unpack_hdf(v) for k, v in group.items()
+        fix_key(k): v[()] if type(v) is h5.Dataset else unpack_hdf(v)
+        for k, v in group.items()
     }
