@@ -26,15 +26,24 @@ class StackPlotter:
         vmax=None,
         cmap="gray",
         z_fmt_fun=lambda i: "z = %i" % i,
+        dims=None,
     ):
         self.fig = fig
         self.ax = ax
         self.stack: np.ndarray = stack
-        self.slices = stack.shape[0]
+        self.slices, self.y_sz, self.x_sz = stack.shape
         self.z_fmt_fun = z_fmt_fun
         self.idx = 0
         self.delta = delta
-        self.im = ax.imshow(self.stack[self.idx, :, :], cmap=cmap, vmin=vmin, vmax=vmax)
+
+        self.width, self.height = (self.x_sz, self.y_sz) if dims is None else dims
+        self.x_frac = self.width / (self.x_sz)
+        self.y_frac = self.height / (self.y_sz)
+        extent = (0, self.width, self.height, 0)
+
+        self.im = ax.imshow(
+            self.stack[self.idx, :, :], cmap=cmap, vmin=vmin, vmax=vmax, extent=extent
+        )
         self.update()
         self.connect_scroll()
 
@@ -49,6 +58,125 @@ class StackPlotter:
         self.im.set_data(self.stack[self.idx, :, :])
         self.ax.set_ylabel(self.z_fmt_fun(self.idx))
         self.im.axes.figure.canvas.draw()
+
+    def connect_scroll(self):
+        self.fig.canvas.mpl_connect("scroll_event", self.onscroll)
+
+
+class StackFuncPlotter:
+    """Returns Object for cycling through frames of a 3D image stack to be fed
+    into the provided func responsible to updating the given axis, using the
+    mouse scroll wheel. Takes the pyplot axis object and data as the first two
+    arguments. Additionally, use delta to set the number of frames each step of
+    the wheel skips through."""
+
+    def __init__(
+        self,
+        fig,
+        ax,
+        stack,
+        func,
+        delta=10,
+        z_fmt_fun=lambda i: "z = %i" % i,
+        dims=None,
+    ):
+        self.fig = fig
+        self.ax = ax
+        self.stack: np.ndarray = stack
+        self.func = func
+        self.slices, self.y_sz, self.x_sz = stack.shape
+        self.z_fmt_fun = z_fmt_fun
+        self.idx = 0
+        self.delta = delta
+
+        self.width, self.height = (self.x_sz, self.y_sz) if dims is None else dims
+        self.x_frac = self.width / (self.x_sz)
+        self.y_frac = self.height / (self.y_sz)
+        self.extent = (0, self.width, self.height, 0)
+
+        self.update()
+        self.connect_scroll()
+
+    def onscroll(self, event):
+        if event.button == "up":
+            self.idx = (self.idx + self.delta) % self.slices
+        else:
+            self.idx = (self.idx - self.delta) % self.slices
+        self.update()
+
+    def update(self):
+        self.func(self.ax, self.stack[self.idx, :, :], extent=self.extent)
+        self.ax.set_ylabel(self.z_fmt_fun(self.idx))
+
+    def connect_scroll(self):
+        self.fig.canvas.mpl_connect("scroll_event", self.onscroll)
+
+
+class ContourStackPlotter:
+    """Returns Object for cycling through frames of a 3D image stack to be fed
+    into a contour plot. Takes the pyplot axis object and data as the first two
+    arguments. Additionally, use delta to set the number of frames each step of
+    the wheel skips through."""
+
+    def __init__(
+        self,
+        fig,
+        ax,
+        stack,
+        levels=20,
+        delta=10,
+        z_fmt_fun=lambda i: "z = %i" % i,
+        dims=None,
+        vmin=None,
+        vmax=None,
+        colors=None,
+        cmap=None,
+        fill_mode=True,
+    ):
+        self.fig = fig
+        self.ax = ax
+        self.stack: np.ndarray = stack
+        self.levels = levels
+        self.slices, self.y_sz, self.x_sz = stack.shape
+        self.z_fmt_fun = z_fmt_fun
+        self.idx = 0
+        self.delta = delta
+        self.vmin, self.vmax = vmin, vmax
+        self.cmap, self.colors, self.fill_mode = cmap, colors, fill_mode
+
+        self.width, self.height = (self.x_sz, self.y_sz) if dims is None else dims
+        self.extent = (0, self.width, self.height, 0)
+        x = np.linspace(0.0, self.width, self.x_sz)
+        y = np.linspace(0.0, self.height, self.y_sz)
+        self.xs, self.ys = np.meshgrid(x, y)
+
+        self.update()
+        self.connect_scroll()
+
+    def onscroll(self, event):
+        if event.button == "up":
+            self.idx = (self.idx + self.delta) % self.slices
+        else:
+            self.idx = (self.idx - self.delta) % self.slices
+        self.update()
+
+    def update(self):
+        z = self.stack[self.idx, :, :]
+        self.ax.clear()
+        if self.fill_mode:
+            self.ax.contourf(
+                self.xs, self.ys, z, levels=self.levels, cmap=self.cmap,
+            )
+            self.ax.invert_yaxis()
+        else:
+            self.ax.imshow(
+                z, cmap=self.cmap, vmin=self.vmin, vmax=self.vmax, extent=self.extent
+            )
+            self.ax.contour(
+                self.xs, self.ys, z, levels=self.levels, colors=self.colors,
+            )
+
+        self.ax.set_ylabel(self.z_fmt_fun(self.idx))
 
     def connect_scroll(self):
         self.fig.canvas.mpl_connect("scroll_event", self.onscroll)
