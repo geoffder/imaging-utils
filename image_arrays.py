@@ -145,6 +145,8 @@ class ContourStackPlotter:
         self.cmap, self.colors, self.fill_mode = cmap, colors, fill_mode
 
         self.width, self.height = (self.x_sz, self.y_sz) if dims is None else dims
+        self.x_frac = self.width / (self.x_sz)
+        self.y_frac = self.height / (self.y_sz)
         self.extent = (0, self.width, self.height, 0)
         x = np.linspace(0.0, self.width, self.x_sz)
         y = np.linspace(0.0, self.height, self.y_sz)
