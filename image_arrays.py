@@ -808,7 +808,7 @@ def avg_trigger_window(
     """Rough implementation of threshold triggered averaging of a stimulus."""
     duration = lead_time + post_time
     n_frames = nearest_index(stim_t, np.min(stim_t) + duration)
-    times = rec_t[trigger_idxs]
+    times = rec_t[np.array(trigger_idxs)]
     post_shift = times + post_time
     start_time = np.min(stim_t) if start_time is None else start_time
     end_time = np.max(stim_t) if end_time is None else end_time
