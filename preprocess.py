@@ -241,6 +241,14 @@ def settings_to_pipeline(settings):
     return [to_fun(k, v) for k, v in settings.items()]
 
 
+def uncork_checkerboard_noise(pth, new_path):
+    with h5.File(pth, "r") as f:
+        wave = f["stimulus"][1, 1, :]
+
+    with h5.File(new_path, "w") as f:
+        f.create_dataset("stimulus", data=np.expand_dims(wave, axis=(1, 2)))
+
+
 if __name__ == "__main__":
     settings = {}
     for arg in sys.argv[1:]:
