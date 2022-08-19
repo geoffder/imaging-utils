@@ -35,6 +35,7 @@ class StackPlotter:
         self.z_fmt_fun = z_fmt_fun
         self.idx = 0
         self.delta = delta
+        self.vmin, self.vmax = vmin, vmax
 
         self.width, self.height = (self.x_sz, self.y_sz) if dims is None else dims
         self.x_frac = self.width / (self.x_sz)
@@ -55,7 +56,11 @@ class StackPlotter:
         self.update()
 
     def update(self):
-        self.im.set_data(self.stack[self.idx, :, :])
+        data = self.stack[self.idx, :, :]
+        self.im.set_data(data)
+        vmin = np.min(data) if self.vmin is None else self.vmin
+        vmax = np.max(data) if self.vmax is None else self.vmax
+        self.im.set_clim(vmin, vmax)
         self.ax.set_ylabel(self.z_fmt_fun(self.idx))
         self.im.axes.figure.canvas.draw()
 
