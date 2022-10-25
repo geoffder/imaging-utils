@@ -824,15 +824,16 @@ def avg_trigger_window(
     window = np.zeros((n_frames, stim.shape[1], stim.shape[2]))
 
     if len(post_shift) == 0:
-        return window, []
+        return window, [], None
 
     if prominences is None:
         weights = np.ones(len(post_shift)) / len(post_shift)
     else:
+        prominences = prominences[legal]
         if max_prominence is not None:
-            weights = np.clip(prominences[legal], 0, max_prominence)
+            weights = np.clip(prominences, 0, max_prominence)
         else:
-            weights = prominences[legal]
+            weights = prominences
 
         if nonlinear_weighting:
             weights = soft_max(weights / np.max(weights))  # prevent overflow
@@ -842,7 +843,7 @@ def avg_trigger_window(
     for t, w in zip(post_shift, weights):
         window += lead_window(stim_t, stim, t, n_frames) * w
 
-    return window, times[legal]
+    return window, times[legal], prominences
 
 
 def trigger_xaxis(stim_t, lead_time, post_time):
@@ -955,3 +956,80 @@ def butter_lowpass(cutoff, fs, order=5):
 def butter_lowpass_filter(data, cutoff, fs, order=5):
     b, a = butter_lowpass(cutoff, fs, order=order)
     return map_axis(lambda d: signal.lfilter(b, a, d), data)
+
+
+def triggered_leads(
+    noise_xaxis,
+    raw_noise,
+    recs_xaxis,
+    recs,
+    grid_idxs,
+    lead_time=5.0,  # length of triggered average movie (seconds before peak)
+    post_time=2.0,
+    peak_threshold=0,  # difference between peaks and their adjacent points
+    prominence=0.75,  # difference between peaks and their surrounding troughs
+    peak_width=2,  # minimum number of points (within tolerance)
+    peak_tolerance=0.4,  # ratio value can drop from peak within width
+    window_size=60,  # length of the window used to calculate prominence
+    min_peak_interval=1,  # number of points required between peaks
+    max_prominence=None,  # clip to avoid dominance by errant peaks
+    weighting="non-linear",
+    start_time=10,  # time to begin using peaks for triggered average
+    end_time=None,  # cutoff time for considering peaks
+    min_peak_count=20,  # ROIs with fewer peaks are thrown out
+):
+    lead_stacks, legal_times, legal_proms = [], [], []
+    count, pos_to_roi, roi_to_pos = 0, [], {}
+    pos_to_grid_idx = []
+
+    for i in range(recs.shape[1]):  # trial
+        windows, legals, trial_proms = [], [], []
+        for j in range(recs.shape[0]):  # roi
+            peak_idxs, peak_proms = find_peaks(
+                recs[j, i],
+                threshold=peak_threshold,
+                prominence=prominence,
+                width=peak_width,
+                wlen=window_size,
+                rel_height=peak_tolerance,
+                distance=min_peak_interval,
+            )
+            trig, times, proms = avg_trigger_window(
+                noise_xaxis,
+                raw_noise,
+                recs_xaxis,
+                lead_time,
+                post_time,
+                peak_idxs[0],
+                prominences=peak_proms[0] if weighting is not None else None,
+                max_prominence=max_prominence,
+                nonlinear_weighting=(weighting == "non-linear"),
+                start_time=start_time,
+                end_time=end_time,
+            )
+            windows.append(trig)
+            legals.append(times)
+            trial_proms.append(proms)
+
+        # rois with trials without triggers are dropped (lookups track the gaps)
+        if all(map(lambda l: len(l) > min_peak_count, legals[:-1])):
+            lead_stacks.append(np.stack(windows, axis=0))
+            legal_times.append(legals)
+            legal_proms.append(trial_proms)
+            pos_to_roi.append(i)
+            roi_to_pos[i] = count
+            pos_to_grid_idx.append(grid_idxs[i])
+            count += 1
+
+    lead_stacks = np.stack(lead_stacks, axis=0)
+    n_legals = np.stack([np.array([len(l) for l in ts]) for ts in legal_times], axis=0)
+
+    return (
+        lead_stacks,
+        legal_times,
+        legal_proms,
+        n_legals,
+        pos_to_roi,
+        roi_to_pos,
+        pos_to_grid_idx,
+    )
