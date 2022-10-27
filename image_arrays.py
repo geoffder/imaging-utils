@@ -982,9 +982,9 @@ def triggered_leads(
     count, pos_to_roi, roi_to_pos = 0, [], {}
     pos_to_grid_idx = []
 
-    for i in range(recs.shape[1]):  # trial
+    for i in range(recs.shape[1]):  # roi
         windows, legals, trial_proms = [], [], []
-        for j in range(recs.shape[0]):  # roi
+        for j in range(recs.shape[0]):  # trial
             peak_idxs, peak_proms = find_peaks(
                 recs[j, i],
                 threshold=peak_threshold,
