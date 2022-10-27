@@ -1021,15 +1021,15 @@ def triggered_leads(
             pos_to_grid_idx.append(grid_idxs[i])
             count += 1
 
-    lead_stacks = np.stack(lead_stacks, axis=0)
     n_legals = np.stack([np.array([len(l) for l in ts]) for ts in legal_times], axis=0)
 
-    return (
-        lead_stacks,
-        legal_times,
-        legal_proms,
-        n_legals,
-        pos_to_roi,
-        roi_to_pos,
-        pos_to_grid_idx,
-    )
+    return {
+        "xaxis": trigger_xaxis(noise_xaxis, lead_time, post_time),
+        "stack": np.stack(lead_stacks, axis=0),
+        "times": legal_times,
+        "proms": legal_proms,
+        "n_events": n_legals,
+        "pos_to_roi": pos_to_roi,
+        "roi_to_pos": roi_to_pos,
+        "pos_to_grid_idx": pos_to_grid_idx,
+    }
