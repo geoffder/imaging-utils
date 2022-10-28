@@ -805,7 +805,7 @@ def avg_trigger_window(
     post_time,
     trigger_idxs,
     prominences=None,
-    max_prominence=None,
+    clip_prominence=None,
     nonlinear_weighting=True,
     start_time=None,
     end_time=None,
@@ -830,8 +830,8 @@ def avg_trigger_window(
         weights = np.ones(len(post_shift)) / len(post_shift)
     else:
         prominences = prominences[legal]
-        if max_prominence is not None:
-            weights = np.clip(prominences, 0, max_prominence)
+        if clip_prominence is not None:
+            weights = np.clip(prominences, 0, clip_prominence)
         else:
             weights = prominences
 
@@ -972,7 +972,8 @@ def triggered_leads(
     peak_tolerance=0.4,  # ratio value can drop from peak within width
     window_size=60,  # length of the window used to calculate prominence
     min_peak_interval=1,  # number of points required between peaks
-    max_prominence=None,  # clip to avoid dominance by errant peaks
+    max_prominence=None,  # drop prominences above the max
+    clip_prominence=None,  # clip to avoid dominance by errant peaks
     weighting="non-linear",
     start_time=10,  # time to begin using peaks for triggered average
     end_time=None,  # cutoff time for considering peaks
@@ -994,15 +995,27 @@ def triggered_leads(
                 rel_height=peak_tolerance,
                 distance=min_peak_interval,
             )
+            if max_prominence is not None and len(peak_idxs[0]) > 0:
+                peak_idxs = np.array(
+                    [
+                        i
+                        for i, p in zip(peak_idxs[0], peak_proms[0])
+                        if p < max_prominence
+                    ]
+                )
+                peak_proms = np.array([p for p in peak_proms[0] if p < max_prominence])
+            else:
+                peak_idxs = peak_idxs[0]
+                peak_proms = peak_proms[0]
             trig, times, proms = avg_trigger_window(
                 noise_xaxis,
                 raw_noise,
                 recs_xaxis,
                 lead_time,
                 post_time,
-                peak_idxs[0],
-                prominences=peak_proms[0] if weighting is not None else None,
-                max_prominence=max_prominence,
+                peak_idxs,
+                prominences=peak_proms if weighting is not None else None,
+                clip_prominence=clip_prominence,
                 nonlinear_weighting=(weighting == "non-linear"),
                 start_time=start_time,
                 end_time=end_time,
