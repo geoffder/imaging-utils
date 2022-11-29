@@ -344,6 +344,88 @@ class MultiWavePlotter:
         self.fig.canvas.mpl_connect("scroll_event", self.onscroll)
 
 
+class MultiOverlayPlotter:
+    def __init__(
+        self,
+        waves,  # dict of dict of arrays (with the same first dimension)
+        xaxes=None,  # if provided, should be dict of dicts like waves
+        delta=1,
+        ymin=None,
+        ymax=None,
+        n_cols=1,
+        title_fmt_fun=lambda i: "trial = %i" % i,
+        idx_fmt_fun=lambda i: "z = %i" % i,
+        **plot_kwargs
+    ):
+        self.waves, self.n_sets = waves, len(waves)
+        self.keys = list(waves.keys())
+        self.n_overlays = {k: len(v) for k, v in waves.items()}
+        self.slices = next(iter(next(iter(waves.values())).values())).shape[0]
+        self.delta, self.n_cols = delta, n_cols
+        self.idx_fmt_fun = idx_fmt_fun
+        self.n_rows = np.ceil(self.n_sets / self.n_cols).astype(int)
+        self.fig, self.ax = plt.subplots(self.n_rows, self.n_cols, **plot_kwargs)
+        self.idx = 0
+        self.lines = {i: [] for i in range(self.n_sets)}
+
+        if ymin is not None and type(ymin) != "dict":
+            ymin = {"default": ymin}
+        elif type(ymin) == "dict" and "default" not in ymin:
+            ymin["default"] = None
+        elif ymin is None:
+            ymin = {"default": None}
+        if ymax is not None and type(ymax) != "dict":
+            ymax = {"default": ymax}
+        elif type(ymax) == "dict" and "default" not in ymax:
+            ymax["default"] = None
+        elif ymax is None:
+            ymax = {"default": None}
+
+        i = 0
+        for row in self.ax:
+            row = row if type(row) == list else [row]
+            for a in row:
+                if i < self.n_sets:
+                    set_key = self.keys[i]
+                    for k, w in self.waves[set_key].items():
+                        if (
+                            xaxes is not None
+                            and set_key in xaxes
+                            and k in xaxes[set_key]
+                        ):
+                            self.lines[i].append(
+                                a.plot(xaxes[set_key][k], w[self.idx], label=k)[0]
+                            )
+                        else:
+                            self.lines[i].append(a.plot(w[self.idx], label=k)[0])
+                    a.set_title(set_key)
+                    a.legend()
+                    a.set_ylim(
+                        ymin.get(i, ymin["default"]), ymax.get(i, ymax["default"]),
+                    )
+                else:
+                    a.set_visible(False)
+                i += 1
+        self.update()
+        self.connect_scroll()
+
+    def onscroll(self, event):
+        if event.button == "up":
+            self.idx = (self.idx + self.delta) % self.slices
+        else:
+            self.idx = (self.idx - self.delta) % self.slices
+        self.update()
+
+    def update(self):
+        for ws, ls in zip(self.waves.values(), self.lines.values()):
+            for w, l in zip(ws.values(), ls):
+                l.set_ydata(w[self.idx])
+        self.fig.suptitle(self.idx_fmt_fun(self.idx))
+
+    def connect_scroll(self):
+        self.fig.canvas.mpl_connect("scroll_event", self.onscroll)
+
+
 class StackExplorer:
     def __init__(
         self,
