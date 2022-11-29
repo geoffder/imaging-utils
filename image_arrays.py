@@ -10,6 +10,11 @@ from matplotlib.patches import Rectangle
 from matplotlib.widgets import TextBox, Slider
 
 
+def nearest_index(arr, v):
+    """Index of value closest to v in ndarray `arr`"""
+    return np.abs(arr - v).argmin()
+
+
 class StackPlotter:
     """Returns Object for cycling through frames of a 3D image stack using the
     mouse scroll wheel. Takes the pyplot axis object and data as the first two
@@ -569,6 +574,14 @@ class StackExplorer:
             self.roi_locked = False if self.roi_locked else True
             self.update_roi()
 
+    def on_beam_click(self, event):
+        if event.button == 1 and event.inaxes == self.beam_ax:
+            self.z_idx = nearest_index(self.zaxis, event.xdata)
+            self.z_marker.set_data(
+                self.zaxis[self.z_idx], self.beams[self.tr_idx, self.z_idx]
+            )
+            self.update_im()
+
     def update_im(self):
         self.im.set_data(self.stack[self.n_idx, self.tr_idx, self.z_idx, :, :])
         # self.stack_ax.set_ylabel("z = %s" % self.z_idx)
@@ -591,6 +604,7 @@ class StackExplorer:
         self.fig.canvas.mpl_connect("scroll_event", self.on_scroll)
         self.fig.canvas.mpl_connect("motion_notify_event", self.on_move)
         self.fig.canvas.mpl_connect("button_release_event", self.on_im_click)
+        self.fig.canvas.mpl_connect("button_release_event", self.on_beam_click)
         if self.ns:
             self.n_slider.on_changed(self.on_n_slide)
         if self.trials:
@@ -773,11 +787,6 @@ def simple_upsample_2D(arr, y=1, x=1):
     spatial dimensions are the final two."""
     n_dims = len(arr.shape)
     return arr.repeat(x, axis=(n_dims - 1)).repeat(y, axis=(n_dims - 2))
-
-
-def nearest_index(arr, v):
-    """Index of value closest to v in ndarray `arr`"""
-    return np.abs(arr - v).argmin()
 
 
 def lead_window(stim_t, stim, stop, n_frames):
