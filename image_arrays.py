@@ -352,6 +352,8 @@ class MultiOverlayPlotter:
         delta=1,
         ymin=None,
         ymax=None,
+        autoscale=True,
+        alpha=None,
         n_cols=1,
         title_fmt_fun=lambda i: "trial = %i" % i,
         idx_fmt_fun=lambda i: "z = %i" % i,
@@ -359,7 +361,6 @@ class MultiOverlayPlotter:
     ):
         self.waves, self.n_sets = waves, len(waves)
         self.keys = list(waves.keys())
-        self.n_overlays = {k: len(v) for k, v in waves.items()}
         self.slices = next(iter(next(iter(waves.values())).values())).shape[0]
         self.delta, self.n_cols = delta, n_cols
         self.idx_fmt_fun = idx_fmt_fun
@@ -367,6 +368,10 @@ class MultiOverlayPlotter:
         self.fig, self.ax = plt.subplots(self.n_rows, self.n_cols, **plot_kwargs)
         self.idx = 0
         self.lines = {i: [] for i in range(self.n_sets)}
+        # track whether xaxes also have trials to be scrolled through
+        self.xaxes = xaxes
+        self.sliced_x = {}
+        self.key_to_ax = {}
 
         if ymin is not None and type(ymin) != "dict":
             ymin = {"default": ymin}
@@ -381,25 +386,45 @@ class MultiOverlayPlotter:
         elif ymax is None:
             ymax = {"default": None}
 
+        if type(autoscale) == bool:
+            self.autoscale = {k: autoscale for k in self.waves.keys()}
+        else:
+            self.autoscale = autoscale
+
         i = 0
         for row in self.ax:
             row = row if type(row) == list else [row]
             for a in row:
                 if i < self.n_sets:
                     set_key = self.keys[i]
+                    self.key_to_ax[set_key] = a
                     for k, w in self.waves[set_key].items():
+                        if alpha is None or type(alpha) == float:
+                            al = alpha
+                        elif set_key in alpha and k in alpha[set_key]:
+                            al = alpha[set_key][k]
+                        else:
+                            al = None
                         if (
                             xaxes is not None
                             and set_key in xaxes
                             and k in xaxes[set_key]
                         ):
+                            x = xaxes[set_key][k]
+                            if x.ndim > 1:
+                                if set_key not in self.sliced_x:
+                                    self.sliced_x[set_key] = {}
+                                self.sliced_x[set_key][k] = True
+                                x = x[0]
                             self.lines[i].append(
-                                a.plot(xaxes[set_key][k], w[self.idx], label=k)[0]
+                                a.plot(x, w[self.idx], alpha=al, label=k)[0]
                             )
                         else:
-                            self.lines[i].append(a.plot(w[self.idx], label=k)[0])
+                            self.lines[i].append(
+                                a.plot(w[self.idx], alpha=al, label=k)[0]
+                            )
                     a.set_title(set_key)
-                    a.legend()
+                    a.legend(frameon=False)
                     a.set_ylim(
                         ymin.get(i, ymin["default"]), ymax.get(i, ymax["default"]),
                     )
@@ -417,9 +442,31 @@ class MultiOverlayPlotter:
         self.update()
 
     def update(self):
-        for ws, ls in zip(self.waves.values(), self.lines.values()):
-            for w, l in zip(ws.values(), ls):
+        for (ws_k, ws), ls in zip(self.waves.items(), self.lines.values()):
+            scaling = ws_k in self.autoscale and self.autoscale[ws_k]
+            if scaling:
+                ymin = float("inf")
+                ymax = -float("inf")
+                xmin = float("inf")
+                xmax = float("inf")
+                rescale_x = False
+            for (k, w), l in zip(ws.items(), ls):
+                if ws_k in self.sliced_x and k in self.sliced_x[ws_k]:
+                    l.set_xdata(self.xaxes[ws_k][k][self.idx])
+                    if scaling:
+                        xmin = min(ymin, self.xaxes[ws_k][k][self.idx].min())
+                        xmax = max(ymax, self.xaxes[ws_k][k][self.idx].max())
+                        rescale_x = True
+
                 l.set_ydata(w[self.idx])
+                if scaling:
+                    ymin = min(ymin, w[self.idx].min())
+                    ymax = max(ymax, w[self.idx].max())
+        if scaling:
+            self.key_to_ax[ws_k].set_ylim(ymin, ymax)
+            if rescale_x:
+                self.key_to_ax[ws_k].set_xlim(xmin, xmax)
+
         self.fig.suptitle(self.idx_fmt_fun(self.idx))
 
     def connect_scroll(self):
