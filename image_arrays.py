@@ -1,6 +1,7 @@
 from typing import Any, Callable, List
 import os
 import h5py as h5
+from hdf_utils import pack_dataset
 
 import numpy as np
 from scipy import signal
@@ -935,6 +936,39 @@ def soft_min(x):
     return ex / np.sum(ex, axis=0)
 
 
+def avg_lead_from_times(
+    stim_t,
+    stim,
+    times,
+    n_frames,
+    prominences=None,
+    clip_prominence=None,
+    nonlinear_weighting=True,
+):
+    window = np.zeros((n_frames, stim.shape[1], stim.shape[2]))
+
+    if len(times) == 0:
+        return window
+
+    if prominences is None:
+        weights = np.ones(len(times)) / len(times)
+    else:
+        if clip_prominence is not None:
+            weights = np.clip(prominences, 0, clip_prominence)
+        else:
+            weights = prominences
+
+        if nonlinear_weighting:
+            weights = soft_max(weights / np.max(weights))  # prevent overflow
+        else:
+            weights = weights / np.sum(weights)
+
+    for t, w in zip(times, weights):
+        window += lead_window(stim_t, stim, t, n_frames) * w
+
+    return window
+
+
 def avg_trigger_window(
     stim_t,
     stim,
@@ -1116,13 +1150,19 @@ def triggered_leads(
     start_time=10,  # time to begin using peaks for triggered average
     end_time=None,  # cutoff time for considering peaks
     min_peak_count=20,  # ROIs with fewer peaks are thrown out
+    workspace=None,
 ):
-    lead_stacks, legal_times, legal_proms = [], [], []
+    legal_times, legal_proms = [], []
     count, pos_to_roi, roi_to_pos = 0, [], {}
     pos_to_grid_idx = []
 
+    start_time = np.min(noise_xaxis) if start_time is None else start_time
+    end_time = np.max(noise_xaxis) if end_time is None else end_time
+    duration = lead_time + post_time
+    n_frames = nearest_index(noise_xaxis, np.min(noise_xaxis) + duration)
+
     for i in range(recs.shape[1]):  # roi
-        windows, legals, trial_proms = [], [], []
+        trial_times, trial_proms = [], []
         for j in range(recs.shape[0]):  # trial
             peak_idxs, peak_proms = find_peaks(
                 recs[j, i],
@@ -1142,45 +1182,69 @@ def triggered_leads(
                     ]
                 )
                 peak_proms = np.array([p for p in peak_proms[0] if p < max_prominence])
+
             else:
                 peak_idxs = peak_idxs[0]
                 peak_proms = peak_proms[0]
-            trig, times, proms = avg_trigger_window(
-                noise_xaxis,
-                raw_noise,
-                recs_xaxis,
-                lead_time,
-                post_time,
-                peak_idxs,
-                prominences=peak_proms if weighting is not None else None,
-                clip_prominence=clip_prominence,
-                nonlinear_weighting=(weighting == "non-linear"),
-                start_time=start_time,
-                end_time=end_time,
-            )
-            windows.append(trig)
-            legals.append(times)
-            trial_proms.append(proms)
+
+            times = recs_xaxis[np.array(peak_idxs)]
+            post_shift = times + post_time
+
+            legals = (post_shift - duration > start_time) * (
+                post_shift <= end_time
+            ).astype(bool)
+            trial_times.append(times[legals])
+            trial_proms.append(peak_proms[legals])
 
         # rois with trials without triggers are dropped (lookups track the gaps)
-        if all(map(lambda l: len(l) > min_peak_count, legals[:-1])):
-            lead_stacks.append(np.stack(windows, axis=0))
-            legal_times.append(legals)
+        if all(map(lambda l: len(l) > min_peak_count, trial_times)):
+            legal_times.append(trial_times)
             legal_proms.append(trial_proms)
             pos_to_roi.append(i)
             roi_to_pos[i] = count
             pos_to_grid_idx.append(grid_idxs[i])
             count += 1
 
+    # if an hdf workspace is given, store the result within, otherwise simply
+    # create and return a dict
+    if workspace is None:
+        grp = {}
+    else:
+        if type(workspace) == tuple:
+            ws, k = workspace
+        else:
+            ws = workspace
+            k = "lead"
+
+        if k in ws:
+            del ws[k]
+
+        grp = ws.create_group(k)
+
+    shape = (len(legal_times), recs.shape[0], n_frames, *raw_noise.shape[-2:])
+    grp["stack"] = np.zeros(shape)
+
+    for i in range(len(pos_to_roi)):
+        for j, (ts, ps) in enumerate(zip(legal_times[i], legal_proms[i])):
+            grp["stack"][i, j] = avg_lead_from_times(
+                noise_xaxis,
+                raw_noise,
+                ts + post_time,
+                n_frames,
+                prominences=ps if weighting is not None else None,
+                clip_prominence=clip_prominence,
+                nonlinear_weighting=(weighting == "non-linear"),
+            )
+
     n_legals = np.stack([np.array([len(l) for l in ts]) for ts in legal_times], axis=0)
 
-    return {
-        "xaxis": trigger_xaxis(noise_xaxis, lead_time, post_time),
-        "stack": np.stack(lead_stacks, axis=0),
-        "times": legal_times,
-        "proms": legal_proms,
-        "n_events": n_legals,
-        "pos_to_roi": pos_to_roi,
-        "roi_to_pos": roi_to_pos,
-        "pos_to_grid_idx": pos_to_grid_idx,
-    }
+    grp["xaxis"] = trigger_xaxis(noise_xaxis, lead_time, post_time)
+    grp["n_events"] = n_legals
+    grp["pos_to_roi"] = np.array(pos_to_roi)
+    grp["pos_to_grid_idx"] = np.array(pos_to_grid_idx)
+    if workspace is None:
+        grp["roi_to_pos"] = roi_to_pos
+    else:
+        pack_dataset(grp, {"roi_to_pos": roi_to_pos})
+
+    return grp, {"times": legal_times, "proms": legal_proms}
