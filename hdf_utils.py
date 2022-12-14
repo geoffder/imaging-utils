@@ -1,4 +1,5 @@
 import h5py as h5
+from typing import Union
 
 INT_PREFIX = "packed_int_"
 
@@ -44,3 +45,66 @@ def unpack_hdf(group):
         fix_key(k): v[()] if type(v) is h5.Dataset else unpack_hdf(v)
         for k, v in group.items()
     }
+
+
+class Workspace:
+    def __init__(self, path=None):
+        if path is None:
+            self.is_hdf = False
+            self._data: Union[dict, h5.File] = {}
+        else:
+            self.is_hdf = True
+            self._data: Union[dict, h5.File] = h5.File(path, mode="w")
+
+    def __setitem__(self, key, item):
+        if self.is_hdf and key in self._data:
+            self._data[key][...] = item
+        elif self.is_hdf and type(item) is dict:
+            if key in self._data:
+                del self._data[key]
+            pack_dataset(self._data[key], item)
+        else:
+            self._data[key] = item
+
+    def __getitem__(self, key):
+        return self._data[key]
+
+    def __repr__(self):
+        return repr(self._data)
+
+    def __len__(self):
+        return len(self._data)
+
+    def __delitem__(self, key):
+        del self._data[key]
+
+    def __contains__(self, item):
+        return item in self._data
+
+    def __iter__(self):
+        return iter(self._data)
+
+    def has_key(self, k):
+        return k in self._data
+
+    def keys(self):
+        return self._data.keys()
+
+    def values(self):
+        return self._data.values()
+
+    def items(self):
+        return self._data.items()
+
+    def create_group(self, key):
+        if self.is_hdf:
+            if key in self._data:
+                del self._data[key]
+            return self._data.create_group(key)
+        else:
+            self._data[key] = {}
+            return self._data[key]
+
+    def close(self):
+        if self.is_hdf:
+            self._data.close()

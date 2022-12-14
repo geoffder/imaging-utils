@@ -1242,7 +1242,7 @@ def triggered_leads(
     grp["n_events"] = n_legals
     grp["pos_to_roi"] = np.array(pos_to_roi)
     grp["pos_to_grid_idx"] = np.array(pos_to_grid_idx)
-    if workspace is None:
+    if workspace is None or type(grp) is dict:
         grp["roi_to_pos"] = roi_to_pos
     else:
         pack_dataset(grp, {"roi_to_pos": roi_to_pos})
