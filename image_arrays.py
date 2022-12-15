@@ -4,6 +4,7 @@ import h5py as h5
 from hdf_utils import pack_dataset
 
 import numpy as np
+import bottleneck as bn
 from scipy import signal
 
 import matplotlib.pyplot as plt
@@ -13,7 +14,7 @@ from matplotlib.widgets import TextBox, Slider
 
 def nearest_index(arr, v):
     """Index of value closest to v in ndarray `arr`"""
-    return np.abs(arr - v).argmin()
+    return bn.nanargmin(np.abs(arr - v))
 
 
 class StackPlotter:
@@ -511,7 +512,7 @@ class StackExplorer:
                 stack = stack.reshape(1, *stack.shape)
 
             if self.trials:
-                self.avg = np.mean(stack, axis=1, keepdims=True)
+                self.avg = np.expand_dims(bn.nanmean(stack, axis=1), 1)
                 stack = np.concatenate([stack, self.avg], axis=1)
                 self.trials = True
 
@@ -644,15 +645,18 @@ class StackExplorer:
         self.update_roi()
 
     def update_beams(self):
-        self.beams = np.mean(
-            self.stack[
-                self.n_idx,
-                :,
-                :,
-                self.roi_y : self.roi_y + self.roi_y_sz,
-                self.roi_x : self.roi_x + self.roi_x_sz,
-            ],
-            axis=(2, 3),
+        self.beams = bn.nanmean(
+            bn.nanmean(
+                self.stack[
+                    self.n_idx,
+                    :,
+                    :,
+                    self.roi_y : self.roi_y + self.roi_y_sz,
+                    self.roi_x : self.roi_x + self.roi_x_sz,
+                ],
+                axis=2,
+            ),
+            axis=2,
         )
         return self.beams
 
@@ -1074,7 +1078,7 @@ def quality_index(arr):
     individual trial. This gives an index of the quality of the signal by
     measuring how much of the variance in each trial explained by signals
     present across all trials."""
-    return np.var(np.mean(arr, axis=0)) / np.mean(np.var(arr, axis=1))
+    return bn.nanvar(bn.nanmean(arr, axis=0)) / bn.nanmean(bn.nanvar(arr, axis=1))
 
 
 def upscale(arr, factor, axes=[0, 1]):
@@ -1156,8 +1160,8 @@ def triggered_leads(
     count, pos_to_roi, roi_to_pos = 0, [], {}
     pos_to_grid_idx = []
 
-    start_time = np.min(noise_xaxis) if start_time is None else start_time
-    end_time = np.max(noise_xaxis) if end_time is None else end_time
+    start_time = bn.nanmin(noise_xaxis) if start_time is None else start_time
+    end_time = bn.nanmax(noise_xaxis) if end_time is None else end_time
     duration = lead_time + post_time
     n_frames = nearest_index(noise_xaxis, np.min(noise_xaxis) + duration)
 

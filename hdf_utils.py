@@ -58,7 +58,11 @@ class Workspace:
 
     def __setitem__(self, key, item):
         if self.is_hdf and key in self._data:
-            self._data[key][...] = item
+            try:
+                self._data[key][...] = item
+            except TypeError:  # if new item has a different shape
+                del self._data[key]
+                self._data[key] = item
         elif self.is_hdf and type(item) is dict:
             if key in self._data:
                 del self._data[key]
