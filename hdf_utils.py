@@ -66,7 +66,7 @@ class Workspace:
         elif self.is_hdf and type(item) is dict:
             if key in self._data:
                 del self._data[key]
-            pack_dataset(self._data[key], item)
+            pack_dataset(self._data, {key: item})
         else:
             self._data[key] = item
 
