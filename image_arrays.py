@@ -300,13 +300,13 @@ class MultiWavePlotter:
         self.idx = 0
         self.lines = {i: [] for i in range(self.n_waves)}
 
-        if ymin is not None and type(ymin) != "dict":
+        if ymin is not None and type(ymin) != dict:
             ymin = {"default": ymin}
-        elif type(ymin) == "dict" and "default" not in ymin:
+        elif type(ymin) == dict and "default" not in ymin:
             ymin["default"] = None
-        if ymax is not None and type(ymax) != "dict":
+        if ymax is not None and type(ymax) != dict:
             ymax = {"default": ymax}
-        elif type(ymax) == "dict" and "default" not in ymax:
+        elif type(ymax) == dict and "default" not in ymax:
             ymax["default"] = None
 
         i = 0

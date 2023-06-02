@@ -68,7 +68,7 @@ def pack_suite2p(
 
     # x and y pix are swapped to coincide with IgorPro conventions
     pixels = {
-        str(i): {"y": n["xpix"], "x": n["ypix"], "weights": n["lam"]}
+        i: {"y": n["xpix"], "x": n["ypix"], "weights": n["lam"]}
         for i, n in enumerate(stats)
     }
 
@@ -113,7 +113,7 @@ def pixels_to_s2p_stats(pixels):
     }
 
 
-def pixels_to_beams(rec, pixels, use_weights=True):
+def pixels_to_beams(rec, px, use_weights=True):
     if use_weights:
         roi_sum = lambda frame, xs, ys, ws: (
             np.sum([frame[x, y] * w for x, y, w in zip(xs, ys, ws)])
@@ -125,8 +125,8 @@ def pixels_to_beams(rec, pixels, use_weights=True):
 
     return np.array(
         [
-            [roi_sum(fr, px["x"], px["y"], px["weights"]) for fr in rec]
-            for px in pixels.values()
+            [roi_sum(fr, px[i]["x"], px[i]["y"], px[i]["weights"]) for fr in rec]
+            for i in sorted(px.keys())
         ]
     )
 

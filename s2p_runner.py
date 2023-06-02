@@ -21,6 +21,7 @@ def bipolar_ops():
     ops["spikedetect"] = False
     ops["sparse_mode"] = False
     ops["diameter"] = 8
+    ops["max_overlap"] = 0.
     ops["allow_overlap"] = False
     ops["connected"] = False
     return ops
@@ -31,7 +32,7 @@ def is_tiff(name):
 
 
 def analyze_folder(
-    base_path, settings={}, exclude_non_cells=0, gif_timestep=200, gen_movies=False
+    base_path, settings={}, exclude_non_cells=False, gif_timestep=200, gen_movies=False
 ):
     contents = os.listdir(base_path)
     names = [f for f in contents if is_tiff(f)]
@@ -55,8 +56,8 @@ def analyze_folder(
     for name, stack in zip(names, stacks):
         shutil.rmtree(os.path.join(base_path, "suite2p"), ignore_errors=True)
         db["tiff_list"] = [name]
-        _out_ops = run_s2p(ops, db)
-        out_name = re.sub("\.tif?[f]", "", name)
+        _out_ops = run_s2p(ops, db) # pyright: ignore
+        out_name = re.sub("\.tif?[f]", "", name) # type: ignore
         pack_suite2p(
             s2p_path,
             out_path,
@@ -72,13 +73,13 @@ def analyze_folder(
         sub_s2p_path = os.path.join(sub_path, "suite2p", "plane0")
         sub_stacks = [io.imread(os.path.join(sub_path, f)) for f in tiff_list]
         pts = {
-            re.sub("\.tif?[f]", "", f): s.shape[0]
+            re.sub("\.tif?[f]", "", f): s.shape[0] # type: ignore
             for f, s in zip(tiff_list, sub_stacks)
         }
         space_dims = sub_stacks[0].shape[1:]
         shutil.rmtree(os.path.join(sub_path, "suite2p"), ignore_errors=True)
         db = {"data_path": [sub_path], "tiff_list": tiff_list}
-        _out_ops = run_s2p(ops, db)
+        _out_ops = run_s2p(ops, db) # pyright: ignore
         pack_suite2p(
             sub_s2p_path,
             out_path,
@@ -97,18 +98,21 @@ if __name__ == "__main__":
     for arg in sys.argv[1:]:
         try:
             k, v = arg.split("=")
-            v = int(v)
+            try:
+                v = int(v)
+            except:
+                v = float(v)
+            settings[k] = v
         except:
             msg = "Invalid argument format. Given %s, but expecting " % arg
             msg += "a key value pair delimited by '=' (e.g. diam=8). "
             msg += "All argument values should be numbers."
             print(msg)
-        settings[k] = v
 
     analyze_folder(
         os.getcwd(),
         settings,
-        exclude_non_cells=int(settings.get("only_cells", 0)),
+        exclude_non_cells=bool(settings.get("only_cells", False)),
         gif_timestep=int(settings.get("gif_timestep", 200)),
         gen_movies=bool(int(settings.get("gen_movies", 0)))
     )
