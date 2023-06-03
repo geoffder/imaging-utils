@@ -1,3 +1,4 @@
+import os
 import h5py as h5
 from typing import Union
 
@@ -28,7 +29,8 @@ def pack_hdf(pth, data_dict):
     same structure. Keys are converted to strings to comply to hdf5 group naming
     convention. In `unpack_hdf`, if the key is all digits, it will be converted
     back from string."""
-    with h5.File(pth + ".h5", "w") as pckg:
+    pth = (pth + ".h5") if os.path.splitext(pth)[1] == "" else pth
+    with h5.File(pth, "w") as pckg:
         pack_dataset(pckg, data_dict)
 
 

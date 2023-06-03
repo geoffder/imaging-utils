@@ -1,7 +1,7 @@
 import sys
 import os
 import shutil
-import re
+import h5py as h5
 
 from skimage import io
 
@@ -28,15 +28,22 @@ def bipolar_ops():
 
 
 def is_tiff(name):
-    return (name.endswith(".tiff") or name.endswith(".tif"))
+    _, ext = os.path.splitext(name)
+    return ext == ".tiff" or ext == ".tif"
 
+def is_tiff_or_h5(name):
+    _, ext = os.path.splitext(name)
+    return ext == ".tiff" or ext == ".tif" or ext == ".h5"
+
+def is_h5(name):
+    _, ext = os.path.splitext(name)
+    return ext == ".h5"
 
 def analyze_folder(
     base_path, settings={}, exclude_non_cells=False, gif_timestep=200, gen_movies=False
 ):
     contents = os.listdir(base_path)
-    names = [f for f in contents if is_tiff(f)]
-    stacks = [io.imread(os.path.join(base_path, f)) for f in names]
+    names = [f for f in contents if is_tiff_or_h5(f)]
 
     # for running sub-folders of tiffs as multiple trials of a single field
     sub_groups = {}
@@ -53,11 +60,20 @@ def analyze_folder(
     ops = {**bipolar_ops(), **settings}  # merge in supplied settings
     db = {"data_path": [base_path]}
 
-    for name, stack in zip(names, stacks):
+    for name in names:
+        if is_h5(name):
+            with h5.File(os.path.join(base_path, name), "r") as f:
+                stack = f[settings.get("h5py_key", "data")][:]
+        else:
+            stack = io.imread(os.path.join(base_path, name))
         shutil.rmtree(os.path.join(base_path, "suite2p"), ignore_errors=True)
-        db["tiff_list"] = [name]
+        out_name, ext = os.path.splitext(name)
+        if ext == ".h5":
+            db["h5py"] = [os.path.join(base_path, name)]
+            db["h5py_key"] = settings["h5py_key"]
+        else:
+            db["tiff_list"] = [name]
         _out_ops = run_s2p(ops, db) # pyright: ignore
-        out_name = re.sub("\.tif?[f]", "", name) # type: ignore
         pack_suite2p(
             s2p_path,
             out_path,
@@ -73,7 +89,7 @@ def analyze_folder(
         sub_s2p_path = os.path.join(sub_path, "suite2p", "plane0")
         sub_stacks = [io.imread(os.path.join(sub_path, f)) for f in tiff_list]
         pts = {
-            re.sub("\.tif?[f]", "", f): s.shape[0] # type: ignore
+            os.path.splitext(f)[0]: s.shape[0] # type: ignore
             for f, s in zip(tiff_list, sub_stacks)
         }
         space_dims = sub_stacks[0].shape[1:]
@@ -101,7 +117,11 @@ if __name__ == "__main__":
             try:
                 v = int(v)
             except:
-                v = float(v)
+                try:
+                    v = float(v)
+                except:
+                    v = v  # leave it as a string
+
             settings[k] = v
         except:
             msg = "Invalid argument format. Given %s, but expecting " % arg
