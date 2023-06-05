@@ -112,16 +112,11 @@ def pixels_to_s2p_stats(pixels):
         for i, px in pixels.items()
     }
 
-
 def pixels_to_beams(rec, px, use_weights=True):
     if use_weights:
-        roi_sum = lambda frame, xs, ys, ws: (
-            np.sum([frame[x, y] * w for x, y, w in zip(xs, ys, ws)])
-        )
+        roi_sum = lambda frame, xs, ys, ws: np.sum(frame[xs, ys] * ws)
     else:
-        roi_sum = lambda frame, xs, ys, _: (
-            np.mean([frame[x, y] for x, y in zip(xs, ys)])
-        )
+        roi_sum = lambda frame, xs, ys, _: np.mean(frame[xs, ys])
 
     return np.array(
         [
