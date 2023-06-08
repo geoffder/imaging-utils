@@ -10,6 +10,8 @@ from scipy import signal
 import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle
 from matplotlib.widgets import TextBox, Slider
+from matplotlib.backend_bases import MouseButton
+
 
 class ROIExplorer:
     def __init__(
@@ -112,6 +114,8 @@ class ROIExplorer:
         self.roi_x_sz, self.roi_y_sz = (
             roi_sz if type(roi_sz) == tuple else (roi_sz, roi_sz)
         )
+        self.rois = {}
+        self.add_roi()
 
         self.build_stack_ax(cmap, vmin, vmax, extent)
         self.build_roi_ax(vmin, vmax)
@@ -146,6 +150,34 @@ class ROIExplorer:
         )
         self.trial_slide_ax.set_title(self.trial_fmt_fun(0))
 
+    def add_roi(
+        self,
+    ):
+        roi = {"x": 0, "y": 0}
+        roi["rect"] = Rectangle(  # type: ignore
+            (0.0, 0.0),
+            self.roi_x_sz * self.x_frac,
+            self.roi_y_sz * self.y_frac,
+            fill=False,
+            color="red",
+            linewidth=2,
+        )
+        self.stack_ax.add_patch(roi["rect"])
+        beams = self.update_beams(roi)
+        roi["lines"] = [self.beam_ax.plot(self.zaxis, b)[0] for b in beams]  # type: ignore
+        if self.trials:
+            roi["lines"][-1].set_linewidth(3)  # avg line thicker
+        if len(self.rois):
+            self.rois[len(self.rois)] = self.rois[0]
+        self.rois[0] = roi  # new roi is the active one
+        return roi
+
+    def remove_roi(self, idx):
+        roi = self.rois[idx]
+        roi["rect"].remove()
+        for l in roi["lines"]:
+            self.beam_ax.lines.remove(l)
+
     def build_stack_ax(self, cmap, vmin, vmax, extent):
         self.im = self.stack_ax.imshow(
             self.stack[self.n_idx, self.tr_idx, self.z_idx, :, :],
@@ -154,25 +186,12 @@ class ROIExplorer:
             vmax=vmax,
             extent=extent,
         )
-        self.roi_rect = Rectangle(
-            (0.0, 0.0),
-            self.roi_x_sz * self.x_frac,
-            self.roi_y_sz * self.y_frac,
-            fill=False,
-            color="red",
-            linewidth=2,
-        )
-        self.stack_ax.add_patch(self.roi_rect)
         self.update_im()
 
     def build_roi_ax(self, vmin, vmax):
-        beams = self.update_beams()
-        self.roi_lines = [self.beam_ax.plot(self.zaxis, b)[0] for b in beams]
-        if self.trials:
-            self.roi_lines[-1].set_linewidth(3)  # avg line thicker
         self.z_marker = self.beam_ax.plot(
             self.zaxis[self.z_idx],
-            beams[self.tr_idx, self.z_idx],
+            self.rois[0]["beams"][self.tr_idx, self.z_idx],
             marker="x",
             c="black",
             markersize=12,
@@ -180,21 +199,21 @@ class ROIExplorer:
         self.beam_ax.set_ylim(vmin, vmax)
         self.update_roi()
 
-    def update_beams(self):
-        self.beams = bn.nanmean(
+    def update_beams(self, roi):
+        roi["beams"] = bn.nanmean(
             bn.nanmean(
                 self.stack[
                     self.n_idx,
                     :,
                     :,
-                    self.roi_y : self.roi_y + self.roi_y_sz,
-                    self.roi_x : self.roi_x + self.roi_x_sz,
+                    roi["y"] : roi["y"] + self.roi_y_sz,
+                    roi["x"] : roi["x"] + self.roi_x_sz,
                 ],
                 axis=2,
             ),
             axis=2,
         )
-        return self.beams
+        return roi["beams"]
 
     def on_n_slide(self, v):
         self.n_idx = int(v)
@@ -218,7 +237,7 @@ class ROIExplorer:
         else:
             self.z_idx = (self.z_idx - self.delta) % self.z_sz
         self.z_marker.set_data(
-            self.zaxis[self.z_idx], self.beams[self.tr_idx, self.z_idx]
+            self.zaxis[self.z_idx], self.rois[0]["beams"][self.tr_idx, self.z_idx]
         )
         self.update_im()
 
@@ -233,42 +252,66 @@ class ROIExplorer:
             if (
                 0 <= x <= (self.x_sz - self.roi_x_sz)
                 and 0 <= y <= (self.y_sz - self.roi_y_sz)
-                and (self.roi_x != x or self.roi_y != y)
+                and (self.rois[0]["x"] != x or self.rois[0]["y"] != y)
             ):
-                self.roi_x, self.roi_y = x, y
-                self.roi_rect.set_xy((x * self.x_frac, y * self.y_frac))
+                self.rois[0]["x"] = x
+                self.rois[0]["y"] = y
+                self.rois[0]["rect"].set_xy((x * self.x_frac, y * self.y_frac))
                 self.update_roi()
 
+    def in_roi(self, roi, x, y):
+        return (
+            x > roi["x"]
+            and x < roi["x"] + self.roi_x_sz
+            and y > roi["y"]
+            and y < roi["y"] + self.roi_y_sz
+        )
+
     def on_im_click(self, event):
-        if event.button == 1 and event.inaxes == self.stack_ax:
-            self.roi_locked = False if self.roi_locked else True
-            self.update_roi()
+        if event.inaxes == self.stack_ax:
+            if event.button == MouseButton.LEFT:
+                self.roi_locked = False if self.roi_locked else True
+                self.update_roi()
+            elif event.button == MouseButton.RIGHT:
+                x = np.floor(event.xdata / self.x_frac).astype(int)
+                y = np.floor(event.ydata / self.y_frac).astype(int)
+                new = True
+                for i in range(1, len(self.rois)):
+                    if self.in_roi(self.rois[i], x, y):
+                        self.remove_roi(i)
+                        new = False
+                if new:
+                    self.add_roi()
 
     def on_beam_click(self, event):
-        if event.button == 1 and event.inaxes == self.beam_ax:
+        if event.button == MouseButton.LEFT and event.inaxes == self.beam_ax:
             self.z_idx = nearest_index(self.zaxis, event.xdata)
             self.z_marker.set_data(
-                self.zaxis[self.z_idx], self.beams[self.tr_idx, self.z_idx]
+                self.zaxis[self.z_idx], self.rois[0]["beams"][self.tr_idx, self.z_idx]
             )
             self.update_im()
 
     def update_im(self):
         self.im.set_data(self.stack[self.n_idx, self.tr_idx, self.z_idx, :, :])
-        # self.stack_ax.set_ylabel("z = %s" % self.z_idx)
         self.stack_ax.set_ylabel(self.z_fmt_fun(self.z_idx))
         self.im.axes.figure.canvas.draw()
 
     def update_roi(self):
         msg = "(click to %s)" % ("unlock" if self.roi_locked else "lock")
         self.beam_ax.set_title("x = %i; y = %i; %s" % (self.roi_x, self.roi_y, msg))
-        beams = self.update_beams()
+        beams = [self.update_beams(r) for r in self.rois.values()]
         if self.auto_roi_scale:
-            self.beam_ax.set_ylim(beams.min(), beams.max())
-        for i, line in enumerate(self.roi_lines):
-            line.set_ydata(beams[i])
-            line.set_color("red" if i == self.tr_idx else "black")
-            line.set_alpha(1 if i == self.tr_idx else 0.75)
-        self.z_marker.set_data(self.zaxis[self.z_idx], beams[self.tr_idx, self.z_idx])
+            mn = min(*[b.min() for b in beams])
+            mx = max(*[b.max() for b in beams])
+            self.beam_ax.set_ylim(mn, mx)
+        for roi in self.rois.values():
+            for i, line in enumerate(roi["lines"]):
+                line.set_ydata(roi["beams"][i])
+                line.set_color("red" if i == self.tr_idx else "black")
+                line.set_alpha(1 if i == self.tr_idx else 0.75)
+        self.z_marker.set_data(
+            self.zaxis[self.z_idx], beams[0][self.tr_idx, self.z_idx]
+        )
 
     def connect_events(self):
         self.fig.canvas.mpl_connect("scroll_event", self.on_scroll)
