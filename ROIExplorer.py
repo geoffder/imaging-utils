@@ -1,25 +1,27 @@
-from typing import Any, Callable, List
-import os
-import h5py as h5
-from hdf_utils import pack_dataset
+from typing import Any, List, Tuple
+from itertools import cycle
 
 import numpy as np
 import bottleneck as bn
-from scipy import signal
 
 import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle
-from matplotlib.widgets import TextBox, Slider
+from matplotlib.widgets import Slider
 from matplotlib.backend_bases import MouseButton
+from image_arrays import nearest_index
 
 
 class ROIExplorer:
+    roi_x_sz: int
+    roi_y_sz: int
+    fig: plt.Figure
+
     def __init__(
         self,
         stack,
         zaxis=None,
         delta=1,
-        roi_sz=1,
+        roi_sz: int | Tuple[int, int] = 1,
         vmin=None,
         vmax=None,
         auto_roi_scale=False,
@@ -28,6 +30,7 @@ class ROIExplorer:
         n_fmt_fun=None,
         trial_fmt_fun=None,
         dims=None,
+        colours=["c", "m", "g", "r", "y", "b", "p"],
         **plot_kwargs
     ):
         self.z_fmt_fun = z_fmt_fun
@@ -91,14 +94,14 @@ class ROIExplorer:
             else:
                 if "gridspec_kw" not in plot_kwargs:
                     plot_kwargs["gridspec_kw"] = {"height_ratios": [0.7, 0.3]}
-                self.fig, self.ax = plt.subplots(2, **plot_kwargs)
+                self.fig, self.ax = plt.subplots(2, **plot_kwargs)  # type: ignore
                 self.stack_ax, self.beam_ax = self.ax
         else:
             self.ns, self.trials = False, False
             stack = stack.reshape(1, 1, *stack.shape)
             if "gridspec_kw" not in plot_kwargs:
                 plot_kwargs["gridspec_kw"] = {"height_ratios": [0.7, 0.3]}
-            self.fig, self.ax = plt.subplots(2, **plot_kwargs)
+            self.fig, self.ax = plt.subplots(2, **plot_kwargs)  # type: ignore
             self.stack_ax, self.beam_ax = self.ax
 
         self.stack, self.delta = stack, delta
@@ -111,9 +114,10 @@ class ROIExplorer:
         self.x_frac = self.width / (self.x_sz)
         self.y_frac = self.height / (self.y_sz)
         extent = (0, self.width, self.height, 0)
-        self.roi_x_sz, self.roi_y_sz = (
+        (self.roi_x_sz, self.roi_y_sz) = (  # type: ignore
             roi_sz if type(roi_sz) == tuple else (roi_sz, roi_sz)
         )
+        self.colour_cycle = cycle(colours)
         self.rois = {}
         self.add_roi()
 
@@ -153,30 +157,62 @@ class ROIExplorer:
     def add_roi(
         self,
     ):
-        roi = {"x": 0, "y": 0}
+        c = next(self.colour_cycle)
+        n_rois = len(self.rois)
+        roi = {"x": 0, "y": 0, "c": c}
         roi["rect"] = Rectangle(  # type: ignore
             (0.0, 0.0),
             self.roi_x_sz * self.x_frac,
             self.roi_y_sz * self.y_frac,
             fill=False,
-            color="red",
+            color=c,
             linewidth=2,
         )
         self.stack_ax.add_patch(roi["rect"])
         beams = self.update_beams(roi)
-        roi["lines"] = [self.beam_ax.plot(self.zaxis, b)[0] for b in beams]  # type: ignore
+        roi["lines"] = []
+        for i, b in enumerate(beams):
+            line = self.beam_ax.plot(self.zaxis, b)[0]
+            line.set_color(c if i == self.tr_idx else "black")
+            line.set_alpha(1 if i == self.tr_idx else 0.75)
+            roi["lines"].append(line)
+
         if self.trials:
             roi["lines"][-1].set_linewidth(3)  # avg line thicker
-        if len(self.rois):
-            self.rois[len(self.rois)] = self.rois[0]
+            # hide non-selected trials if there is more than one roi now
+            if n_rois > 0:
+                rs: List[Any] = [roi, self.rois[0]] if n_rois == 1 else [roi]
+                for r in rs:
+                    for i, l in enumerate(r["lines"]):
+                        if i != self.tr_idx:
+                            self.beam_ax.lines.remove(l)
+
+        if n_rois:
+            # bring z_marker to front
+            z = max([line.get_zorder() for line in self.beam_ax.lines])
+            self.z_marker.set_zorder(z + 1)
+            # move active ROI to highest index
+            self.rois[n_rois] = self.rois[0]
         self.rois[0] = roi  # new roi is the active one
         return roi
 
     def remove_roi(self, idx):
         roi = self.rois[idx]
+        clr = roi["c"]
         roi["rect"].remove()
         for l in roi["lines"]:
             self.beam_ax.lines.remove(l)
+        del roi
+        # add back trial lines if back down to one ROI
+        if len(self.rois) == 1:
+            for i, l in enumerate(self.rois[0]["lines"]):
+                if i != self.tr_idx:
+                    self.beam_ax.add_line(l)
+        else:
+            # active ROI takes on colour of deleted one
+            self.rois[0]["c"] = clr
+            self.rois[0]["rect"].set_color(clr)
+            self.rois[0]["lines"][self.tr_idx].set_color(clr)
 
     def build_stack_ax(self, cmap, vmin, vmax, extent):
         self.im = self.stack_ax.imshow(
@@ -228,6 +264,11 @@ class ROIExplorer:
             if self.tr_idx < self.tr_sz - 1
             else "average"
         )
+        for roi in self.rois:
+            for i, line in enumerate(roi["lines"]):
+                line.set_color(roi["c"] if i == self.tr_idx else "black")
+                line.set_alpha(1 if i == self.tr_idx else 0.75)
+
         self.update_im()
         self.update_roi()
 
@@ -307,8 +348,6 @@ class ROIExplorer:
         for roi in self.rois.values():
             for i, line in enumerate(roi["lines"]):
                 line.set_ydata(roi["beams"][i])
-                line.set_color("red" if i == self.tr_idx else "black")
-                line.set_alpha(1 if i == self.tr_idx else 0.75)
         self.z_marker.set_data(
             self.zaxis[self.z_idx], beams[0][self.tr_idx, self.z_idx]
         )
