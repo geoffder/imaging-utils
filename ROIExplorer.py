@@ -30,6 +30,10 @@ class ROIExplorer:
         n_fmt_fun=None,
         trial_fmt_fun=None,
         dims=None,
+        bg_alpha=0.6,
+        fg_alpha=0.8,
+        trial_width=1.5,
+        avg_width=3,
         colours=["c", "m", "g", "r", "y", "b", "p"],
         **plot_kwargs
     ):
@@ -110,6 +114,8 @@ class ROIExplorer:
         self.zaxis = np.arange(self.z_sz) if zaxis is None else zaxis
         self.roi_locked = False
 
+        self.bg_alpha, self.fg_alpha = bg_alpha, fg_alpha
+        self.trial_width, self.avg_width = trial_width, avg_width
         self.width, self.height = (self.x_sz, self.y_sz) if dims is None else dims
         self.x_frac = self.width / (self.x_sz)
         self.y_frac = self.height / (self.y_sz)
@@ -172,13 +178,13 @@ class ROIExplorer:
         beams = self.update_beams(roi)
         roi["lines"] = []
         for i, b in enumerate(beams):
-            line = self.beam_ax.plot(self.zaxis, b)[0]
+            line = self.beam_ax.plot(self.zaxis, b, lw=self.trial_width)[0]
             line.set_color(c if i == self.tr_idx else "black")
-            line.set_alpha(1 if i == self.tr_idx else 0.75)
+            line.set_alpha(self.fg_alpha if i == self.tr_idx else self.bg_alpha)
             roi["lines"].append(line)
 
         if self.trials:
-            roi["lines"][-1].set_linewidth(3)  # avg line thicker
+            roi["lines"][-1].set_linewidth(self.avg_width)
             # hide non-selected trials if there is more than one roi now
             if n_rois > 0:
                 rs: List[Any] = [roi, self.rois[0]] if n_rois == 1 else [roi]
@@ -267,7 +273,7 @@ class ROIExplorer:
         for roi in self.rois:
             for i, line in enumerate(roi["lines"]):
                 line.set_color(roi["c"] if i == self.tr_idx else "black")
-                line.set_alpha(1 if i == self.tr_idx else 0.75)
+                line.set_alpha(self.fg_alpha if i == self.tr_idx else self.bg_alpha)
 
         self.update_im()
         self.update_roi()
