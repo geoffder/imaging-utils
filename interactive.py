@@ -740,6 +740,7 @@ class StackExplorer:
         self.fig.canvas.mpl_connect("motion_notify_event", self.on_move)
         self.fig.canvas.mpl_connect("button_release_event", self.on_im_click)
         self.fig.canvas.mpl_connect("button_release_event", self.on_beam_click)
+        self.fig.canvas.mpl_connect("motion_notify_event", self.on_beam_click)
         if self.ns:
             self.n_slider.on_changed(self.on_n_slide)
         if self.trials:
