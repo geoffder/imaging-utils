@@ -98,6 +98,22 @@ def crop_sides(arr, x_edge, y_edge):
         return arr[:, y_edge : (y_size - y_edge), x_edge : (x_size - x_edge)]
 
 
+def crop_starts(arr, x_edge, y_edge):
+    if arr.ndim > 3:
+        return arr[:, :, y_edge:, x_edge:]
+    else:
+        return arr[:, y_edge:, x_edge:]
+
+
+def crop_ends(arr, x_edge, y_edge):
+    y_size = arr.shape[-2]
+    x_size = arr.shape[-1]
+    if arr.ndim > 3:
+        return arr[:, :, : (y_size - y_edge), : (x_size - x_edge)]
+    else:
+        return arr[:, : (y_size - y_edge), : (x_size - x_edge)]
+
+
 def qi_threshold(arr, thresh, mask_val=0):
     """Replace pixels/beams that do not pass the target signal-to-noise ratio."""
     n_trials, t, x, y = arr.shape
